@@ -20,9 +20,9 @@ public class PlayerService {
         return playerRepository.save(player);
     }
 
-    // Save a list of players
-    public void saveAll(List<Player> players) {
-        playerRepository.saveAll(players);
+    // Find a player by ID
+    public Player findById(String playerId) {
+        return playerRepository.findById(playerId).orElse(null);
     }
 
     // Retrieve all players

@@ -2,15 +2,14 @@ package com.dojonate.statsvisualizer.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "player")
 public class Player {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
     @Column(name = "player_id", unique = true, nullable = false)
     private String playerId;
 
@@ -19,12 +18,6 @@ public class Player {
 
     @Column(name = "last_name", nullable = false)
     private String lastName;
-
-    @Column(name = "team", nullable = false)
-    private String team;
-
-    @Column(name = "position", nullable = false)
-    private String position;
 
     @Column(name = "batting_hand")
     private String battingHand;
@@ -35,30 +28,22 @@ public class Player {
     @Column(name = "birth_date")
     private LocalDate birthDate;
 
+    @OneToMany(mappedBy = "player", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<RosterEntry> rosterEntries = new HashSet<>();
+
     public Player() {
     }
 
-    public Player(String playerId, String firstName, String lastName, String team, String position,
-                  String battingHand, String throwingHand, LocalDate birthDate) {
+    public Player(String playerId, String firstName, String lastName, String battingHand, String throwingHand, LocalDate birthDate) {
         this.playerId = playerId;
         this.firstName = firstName;
         this.lastName = lastName;
-        this.team = team;
-        this.position = position;
         this.battingHand = battingHand;
         this.throwingHand = throwingHand;
         this.birthDate = birthDate;
     }
 
     // Getters and Setters
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
 
     public String getPlayerId() {
         return playerId;
@@ -84,22 +69,6 @@ public class Player {
         this.lastName = lastName;
     }
 
-    public String getTeam() {
-        return team;
-    }
-
-    public void setTeam(String team) {
-        this.team = team;
-    }
-
-    public String getPosition() {
-        return position;
-    }
-
-    public void setPosition(String position) {
-        this.position = position;
-    }
-
     public String getBattingHand() {
         return battingHand;
     }
@@ -122,5 +91,13 @@ public class Player {
 
     public void setBirthDate(LocalDate birthDate) {
         this.birthDate = birthDate;
+    }
+
+    public Set<RosterEntry> getRosterEntries() {
+        return rosterEntries;
+    }
+
+    public void setRosterEntries(Set<RosterEntry> rosterEntries) {
+        this.rosterEntries = rosterEntries;
     }
 }

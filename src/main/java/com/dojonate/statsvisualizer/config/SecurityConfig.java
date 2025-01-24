@@ -19,7 +19,7 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for simplicity
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/admin/**").authenticated() // Restrict /admin/** to authenticated users
+                        .requestMatchers("/maint/**").authenticated() // Restrict /maint/** to authenticated users
                         .anyRequest().permitAll() // Allow all other endpoints
                 )
                 .httpBasic(Customizer.withDefaults()); // Enable basic authentication with default settings

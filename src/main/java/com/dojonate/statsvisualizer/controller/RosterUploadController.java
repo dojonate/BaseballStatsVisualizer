@@ -1,7 +1,9 @@
 package com.dojonate.statsvisualizer.controller;
 
-import com.dojonate.statsvisualizer.model.Player;
-import com.dojonate.statsvisualizer.service.PlayerService;
+import com.dojonate.statsvisualizer.model.RosterEntry;
+import com.dojonate.statsvisualizer.model.Team;
+import com.dojonate.statsvisualizer.service.RosterEntryService;
+import com.dojonate.statsvisualizer.service.TeamService;
 import com.dojonate.statsvisualizer.util.RosFileParser;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -12,21 +14,22 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.List;
 
 @Controller
-@RequestMapping("/maint")
-public class FileUploadController {
+@RequestMapping("/rosters")
+public class RosterUploadController {
 
-    private final PlayerService playerService;
+    private final RosterEntryService rosterEntryService;
+    private final TeamService teamService;
     private final RosFileParser rosFileParser;
 
     @Value("${file.upload.temp-dir}")
     private String tempDir;
 
-    public FileUploadController(PlayerService playerService, RosFileParser rosFileParser) {
-        this.playerService = playerService;
+    public RosterUploadController(RosterEntryService rosterEntryService, TeamService teamService, RosFileParser rosFileParser) {
+        this.rosterEntryService = rosterEntryService;
+        this.teamService = teamService;
         this.rosFileParser = rosFileParser;
     }
 
@@ -42,20 +45,21 @@ public class FileUploadController {
             if (!tempDirectory.exists() && !tempDirectory.mkdirs()) {
                 throw new IOException("Failed to create temporary directory: " + tempDirectory.getAbsolutePath());
             }
-            else {
-                System.out.println("Created temporary directory: " + tempDirectory.getAbsolutePath());
-            }
 
             // Save the file temporarily
             File tempFile = new File(tempDirectory, file.getOriginalFilename());
             file.transferTo(tempFile);
 
-            // Debug: Log file path
-            System.out.println("Uploaded file: " + tempFile.getAbsolutePath() + ", size: " + tempFile.length());
+            // Extract team abbreviation from filename (e.g., "2011TEX.ROS" -> "TEX")
+            String fileName = tempFile.getName();
+            String teamAbbreviation = fileName.substring(0, 3); // Assumes fixed format "2011TEX.ROS"
 
-            // Parse and save players
-            List<Player> players = rosFileParser.parseRosFile(tempFile.toPath());
-            playerService.saveAll(players);
+            // Find or create the team using TeamService
+            Team team = teamService.findOrCreateTeam(teamAbbreviation, "Unknown Team", "Unknown League");
+
+            // Parse the file and save roster entries
+            List<RosterEntry> rosterEntries = rosFileParser.parseRosFile(tempFile.toPath(), team);
+            rosterEntryService.saveAll(rosterEntries);
 
             // Clean up the temporary file
             if (!tempFile.delete()) {
