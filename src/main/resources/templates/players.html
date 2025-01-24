@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Player List</title>
+</head>
+<body>
+<div th:replace="fragments/header :: header"></div>
+
+<main>
+  <h1>Players</h1>
+  <table border="1">
+    <thead>
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Team</th>
+      <th>Batting Average</th>
+      <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="player : ${players}">
+      <td th:text="${player.id}"></td>
+      <td th:text="${player.name}"></td>
+      <td th:text="${player.team}"></td>
+      <td th:text="${player.battingAverage}"></td>
+      <td>
+        <a th:href="@{/players/edit/{id}(id=${player.id})}">Edit</a> |
+        <a th:href="@{/players/delete/{id}(id=${player.id})}">Delete</a>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+</main>
+
+<div th:replace="fragments/footer :: footer"></div>
+</body>
+</html>
