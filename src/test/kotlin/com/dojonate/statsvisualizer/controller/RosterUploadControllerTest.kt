@@ -5,10 +5,14 @@ import com.dojonate.statsvisualizer.service.RosterEntryService
 import com.dojonate.statsvisualizer.service.TeamService
 import com.dojonate.statsvisualizer.util.RosFileParser
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.mock
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.mock.web.MockMultipartFile
 import org.springframework.test.web.servlet.MockMvc
@@ -16,6 +20,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 
 @WebMvcTest(RosterUploadController::class)
+@Import(RosterUploadControllerTest.TestConfig::class) // Import custom test configuration
 class RosterUploadControllerTest {
 
     @Autowired
@@ -47,5 +52,27 @@ class RosterUploadControllerTest {
             .contentType(MediaType.MULTIPART_FORM_DATA))
             .andExpect(MockMvcResultMatchers.status().isOk)
             .andExpect(MockMvcResultMatchers.content().string("File uploaded and processed successfully."))
+    }
+
+    /**
+     * Custom configuration for injecting mocked beans.
+     */
+    @TestConfiguration
+    class TestConfig {
+
+        @Bean
+        fun teamService(): TeamService {
+            return mock(TeamService::class.java)
+        }
+
+        @Bean
+        fun rosterEntryService(): RosterEntryService {
+            return mock(RosterEntryService::class.java)
+        }
+
+        @Bean
+        fun rosFileParser(): RosFileParser {
+            return mock(RosFileParser::class.java)
+        }
     }
 }
