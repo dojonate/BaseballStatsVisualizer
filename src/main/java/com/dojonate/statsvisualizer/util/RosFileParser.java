@@ -28,19 +28,7 @@ public class RosFileParser {
                 String[] fields = line.split(",");
                 if (fields.length >= 7) {
                     // Create a Player object
-                    Player player = new Player();
-                    player.setPlayerId(fields[0].trim());
-                    player.setLastName(fields[1].trim());
-                    player.setFirstName(fields[2].trim());
-                    player.setBattingHand(fields[3].trim());
-                    player.setThrowingHand(fields[4].trim());
-
-                    // Create a RosterEntry object
-                    RosterEntry rosterEntry = new RosterEntry();
-                    rosterEntry.setPlayer(player);
-                    rosterEntry.setTeam(team);
-                    rosterEntry.setYear(year);
-                    rosterEntry.setPosition(fields[6].trim());
+                    RosterEntry rosterEntry = getRosterEntry(team, fields, year);
 
                     rosterEntries.add(rosterEntry);
                 } else {
@@ -50,5 +38,22 @@ public class RosFileParser {
         }
 
         return rosterEntries;
+    }
+
+    private static RosterEntry getRosterEntry(Team team, String[] fields, int year) {
+        Player player = new Player();
+        player.setPlayerId(fields[0].trim());
+        player.setLastName(fields[1].trim());
+        player.setFirstName(fields[2].trim());
+        player.setBattingHand(fields[3].trim());
+        player.setThrowingHand(fields[4].trim());
+
+        // Create a RosterEntry object
+        RosterEntry rosterEntry = new RosterEntry();
+        rosterEntry.setPlayer(player);
+        rosterEntry.setTeam(team);
+        rosterEntry.setYear(year);
+        rosterEntry.setPosition(fields[6].trim());
+        return rosterEntry;
     }
 }

@@ -20,6 +20,8 @@ import java.util.List;
 @RequestMapping("/rosters")
 public class RosterUploadController {
 
+    private static final int TEAM_ABBREVIATION_LENGTH = 3;
+
     private final RosterEntryService rosterEntryService;
     private final TeamService teamService;
     private final RosFileParser rosFileParser;
@@ -40,36 +42,39 @@ public class RosterUploadController {
         }
 
         try {
-            // Ensure the temporary directory exists
-            File tempDirectory = new File(tempDir);
-            if (!tempDirectory.exists() && !tempDirectory.mkdirs()) {
-                throw new IOException("Failed to create temporary directory: " + tempDirectory.getAbsolutePath());
-            }
-
-            // Save the file temporarily
-            File tempFile = new File(tempDirectory, file.getOriginalFilename());
-            file.transferTo(tempFile);
-
-            // Extract team abbreviation from filename (e.g., "2011TEX.ROS" -> "TEX")
-            String fileName = tempFile.getName();
-            String teamAbbreviation = fileName.substring(0, 3); // Assumes fixed format "2011TEX.ROS"
-
-            // Find or create the team using TeamService
+            File uploadedFile = saveFileTemporarily(file);
+            String teamAbbreviation = extractTeamAbbreviation(uploadedFile.getName());
             Team team = teamService.findOrCreateTeam(teamAbbreviation, "Unknown Team", "Unknown League");
-
-            // Parse the file and save roster entries
-            List<RosterEntry> rosterEntries = rosFileParser.parseRosFile(tempFile.toPath(), team);
-            rosterEntryService.saveAll(rosterEntries);
-
-            // Clean up the temporary file
-            if (!tempFile.delete()) {
-                System.err.println("Failed to delete temporary file: " + tempFile.getAbsolutePath());
-            }
-
+            processRosterFile(uploadedFile, team);
+            cleanupTemporaryFile(uploadedFile);
             return ResponseEntity.ok("File uploaded and processed successfully.");
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to process file.");
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to process file: " + e.getMessage());
+        }
+    }
+
+    private File saveFileTemporarily(MultipartFile file) throws IOException {
+        File tempDirectory = new File(tempDir);
+        if (!tempDirectory.exists() && !tempDirectory.mkdirs()) {
+            throw new IOException("Failed to create temporary directory: " + tempDirectory.getAbsolutePath());
+        }
+        File uploadedFile = new File(tempDirectory, file.getOriginalFilename());
+        file.transferTo(uploadedFile);
+        return uploadedFile;
+    }
+
+    private String extractTeamAbbreviation(String fileName) {
+        return fileName.substring(0, TEAM_ABBREVIATION_LENGTH);
+    }
+
+    private void processRosterFile(File uploadedFile, Team team) throws IOException {
+        List<RosterEntry> rosterEntries = rosFileParser.parseRosFile(uploadedFile.toPath(), team);
+        rosterEntryService.saveAll(rosterEntries);
+    }
+
+    private void cleanupTemporaryFile(File uploadedFile) {
+        if (!uploadedFile.delete()) {
+            System.err.println("Failed to delete temporary file: " + uploadedFile.getAbsolutePath());
         }
     }
 }
