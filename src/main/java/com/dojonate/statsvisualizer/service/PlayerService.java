@@ -17,7 +17,8 @@ public class PlayerService {
 
     // Save a single player
     public Player save(Player player) {
-        return playerRepository.save(player);
+        return playerRepository.findById(player.getPlayerId())
+                .orElseGet(() -> playerRepository.save(player));
     }
 
     // Find a player by ID
