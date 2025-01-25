@@ -17,7 +17,7 @@ import java.io.IOException;
 import java.util.List;
 
 @Controller
-@RequestMapping("/rosters")
+@RequestMapping("/upload")
 public class RosterUploadController {
 
     private static final int TEAM_ABBREVIATION_LENGTH = 3;
@@ -35,7 +35,7 @@ public class RosterUploadController {
         this.rosFileParser = rosFileParser;
     }
 
-    @PostMapping("/upload")
+    @PostMapping("/rosters")
     public ResponseEntity<String> uploadRosFile(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body("File is empty.");

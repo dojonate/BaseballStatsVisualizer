@@ -15,12 +15,15 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.mock.web.MockMultipartFile
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 
 @WebMvcTest(RosterUploadController::class)
-@Import(RosterUploadControllerTest.TestConfig::class) // Import custom test configuration
+@Import(RosterUploadControllerTest.TestConfig::class, com.dojonate.statsvisualizer.config.SecurityConfig::class)
 class RosterUploadControllerTest {
 
     @Autowired
@@ -38,41 +41,51 @@ class RosterUploadControllerTest {
     @Value("\${file.upload.temp-dir}")
     private lateinit var tempDir: String
 
+    companion object {
+        private const val VALID_ROS_CSV = "adamm001,Adams,Mike,R,R,HOU,P\n" // Moved CSV content to a constant
+    }
+
     @Test
     fun `should upload a valid ROS file`() {
-        val team = Team("HOU", "Houston Astros", "AL", 1962, 2024)
-        whenever(teamService.findOrCreateTeam("HOU", "Unknown Team", "Unknown League")).thenReturn(team)
+        val expectedTeam = Team("HOU", "Houston Astros", "AL", 1962, 2024) // Renamed variable for clarity
+        whenever(teamService.findOrCreateTeam("HOU", "Unknown Team", "Unknown League")).thenReturn(expectedTeam)
 
-        val mockFile = MockMultipartFile(
-            "file", "2011HOU.ROS", MediaType.TEXT_PLAIN_VALUE, "adamm001,Adams,Mike,R,R,HOU,P\n".toByteArray()
-        )
+        val mockFile = createMockFile("2011HOU.ROS", VALID_ROS_CSV)
 
-        mockMvc.perform(MockMvcRequestBuilders.multipart("/rosters/upload")
-            .file(mockFile)
-            .contentType(MediaType.MULTIPART_FORM_DATA))
+        performFileUpload(mockFile)
             .andExpect(MockMvcResultMatchers.status().isOk)
             .andExpect(MockMvcResultMatchers.content().string("File uploaded and processed successfully."))
     }
 
-    /**
-     * Custom configuration for injecting mocked beans.
-     */
+    private fun createMockFile(fileName: String, content: String): MockMultipartFile {
+        return MockMultipartFile(
+            "file",
+            fileName,
+            MediaType.TEXT_PLAIN_VALUE,
+            content.toByteArray()
+        )
+    }
+
+    private fun performFileUpload(file: MockMultipartFile): ResultActions {
+        return mockMvc.perform(
+            MockMvcRequestBuilders.multipart("/upload/rosters")
+                .file(file)
+                .with(csrf())
+                .with(httpBasic("maintainer", "password"))
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+        )
+    }
+
     @TestConfiguration
     open class TestConfig {
 
         @Bean
-        open fun teamService(): TeamService {
-            return mock(TeamService::class.java)
-        }
+        open fun teamService(): TeamService = mock(TeamService::class.java)
 
         @Bean
-        open fun rosterEntryService(): RosterEntryService {
-            return mock(RosterEntryService::class.java)
-        }
+        open fun rosterEntryService(): RosterEntryService = mock(RosterEntryService::class.java)
 
         @Bean
-        open fun rosFileParser(): RosFileParser {
-            return mock(RosFileParser::class.java)
-        }
+        open fun rosFileParser(): RosFileParser = mock(RosFileParser::class.java)
     }
 }

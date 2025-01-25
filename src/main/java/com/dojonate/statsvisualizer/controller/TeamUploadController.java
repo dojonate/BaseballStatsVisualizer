@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.List;
 
 @Controller
-@RequestMapping("/teams")
+@RequestMapping("/upload")
 public class TeamUploadController {
 
     private static final Logger logger = LoggerFactory.getLogger(TeamUploadController.class);
@@ -37,7 +37,7 @@ public class TeamUploadController {
         this.csvTeamParser = csvTeamParser;
     }
 
-    @PostMapping("/upload")
+    @PostMapping("/teams")
     public ResponseEntity<String> handleCsvUpload(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
             logger.warn("File upload failed: file is empty.");
