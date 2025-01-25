@@ -18,7 +18,7 @@ public class RosterEntry {
     @JoinColumn(name = "team_id", nullable = false)
     private Team team;
 
-    @Column(name = "year", nullable = false)
+    @Column(name = "`year`", nullable = false)
     private int year;
 
     @Column(name = "position", nullable = false)

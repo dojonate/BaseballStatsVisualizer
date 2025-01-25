@@ -18,7 +18,7 @@ public class RosFileParser {
     public List<RosterEntry> parseRosFile(Path filePath, Team team) throws IOException {
         List<RosterEntry> rosterEntries = new ArrayList<>();
 
-        // Extract the year from the filename (e.g., "2011TEX.ROS")
+        // Extract the year from the filename (e.g., "TEX2011.ROS")
         String fileName = filePath.getFileName().toString();
         int year = Integer.parseInt(fileName.substring(3, 7)); // Assumes the filename starts with the year
 
