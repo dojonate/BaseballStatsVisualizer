@@ -5,7 +5,8 @@ import com.dojonate.statsvisualizer.service.RosterEntryService
 import com.dojonate.statsvisualizer.service.TeamService
 import com.dojonate.statsvisualizer.util.RosFileParser
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.*
+import org.mockito.kotlin.whenever
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.http.MediaType
@@ -15,18 +16,27 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 
 @WebMvcTest(RosterUploadController::class)
-class RosterUploadControllerTest(
-    private val mockMvc: MockMvc,
-    private val teamService: TeamService,
-    private val rosterEntryService: RosterEntryService,
-    private val rosFileParser: RosFileParser,
-    @Value("\${file.upload.temp-dir}") private val tempDir: String
-) {
+class RosterUploadControllerTest {
+
+    @Autowired
+    private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var teamService: TeamService
+
+    @Autowired
+    private lateinit var rosterEntryService: RosterEntryService
+
+    @Autowired
+    private lateinit var rosFileParser: RosFileParser
+
+    @Value("\${file.upload.temp-dir}")
+    private lateinit var tempDir: String
 
     @Test
     fun `should upload a valid ROS file`() {
         val team = Team("HOU", "Houston Astros", "AL", 1962, 2024)
-        `when`(teamService.findOrCreateTeam("HOU", "Unknown Team", "Unknown League")).thenReturn(team)
+        whenever(teamService.findOrCreateTeam("HOU", "Unknown Team", "Unknown League")).thenReturn(team)
 
         val mockFile = MockMultipartFile(
             "file", "2011HOU.ROS", MediaType.TEXT_PLAIN_VALUE, "adamm001,Adams,Mike,R,R,HOU,P\n".toByteArray()
