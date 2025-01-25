@@ -58,20 +58,20 @@ class RosterUploadControllerTest {
      * Custom configuration for injecting mocked beans.
      */
     @TestConfiguration
-    class TestConfig {
+    open class TestConfig {
 
         @Bean
-        fun teamService(): TeamService {
+        open fun teamService(): TeamService {
             return mock(TeamService::class.java)
         }
 
         @Bean
-        fun rosterEntryService(): RosterEntryService {
+        open fun rosterEntryService(): RosterEntryService {
             return mock(RosterEntryService::class.java)
         }
 
         @Bean
-        fun rosFileParser(): RosFileParser {
+        open fun rosFileParser(): RosFileParser {
             return mock(RosFileParser::class.java)
         }
     }
