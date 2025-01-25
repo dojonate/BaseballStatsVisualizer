@@ -93,8 +93,9 @@ file.upload.temp-dir=/tmp
 
 ## Roadmap
 
-- Add support for additional data sources such as Fangraphs, Baseball Reference, and Baseball Savant.
-- Enhance data visualization features.
+- Add support for actual stats imported from Retrosheets.
+- Implement data visualization features.
+- Add core statistics calculations (e.g. OBP, SLG, AVG, and a few custom ones like "Hitting Average", which is OBP minus walks.)
 - Implement advanced filtering and analytics tools.
 
 ## License
