@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
 <div th:fragment="header">
   <nav>
     <ul>
       <li><a th:href="@{/}">Home</a></li>
       <li><a th:href="@{/players}">Player Stats</a></li>
+      <li><a th:href="@{/teams}">Team Stats</a></li>
+      <li><a th:href="@{/rosters}">Roster Stats</a></li>
       <!-- Add more navigation links as needed -->
     </ul>
   </nav>
