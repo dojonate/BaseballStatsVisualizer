@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "player")
@@ -100,4 +101,13 @@ public class Player {
     public void setRosterEntries(Set<RosterEntry> rosterEntries) {
         this.rosterEntries = rosterEntries;
     }
+
+    public String getAllTeamNames() {
+        return rosterEntries.stream()
+                .map(entry -> entry.getTeam().getName()) // Map each roster entry to the team's name
+                .distinct() // Ensure no duplicate team names
+                .sorted() // Sort alphabetically for consistency
+                .collect(Collectors.joining("; ")); // Concatenate with semicolons
+    }
+
 }

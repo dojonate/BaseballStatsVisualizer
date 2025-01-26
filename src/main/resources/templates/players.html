@@ -1,37 +1,83 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="UTF-8">
   <title>Player List</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 </head>
 <body>
 <div th:replace="fragments/header :: header"></div>
 
-<main>
-  <h1>Players</h1>
-  <table border="1">
-    <thead>
+<main class="container mt-4">
+  <h1 class="mb-4">Players</h1>
+
+  <!-- Search Bar -->
+  <form th:action="@{/players}" method="get" class="form-inline mb-4">
+    <input type="text" name="search" class="form-control mr-2" placeholder="Search by name or team" th:value="${search}">
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+
+  <!-- Player Table -->
+  <table class="table table-striped table-bordered">
+    <thead class="thead-dark">
     <tr>
-      <th>ID</th>
-      <th>Name</th>
-      <th>Team</th>
-      <th>Batting Average</th>
-      <th>Actions</th>
+      <th>
+        <a th:href="@{/players(sortBy='lastName', direction=${sortBy == 'lastName' && direction == 'asc' ? 'desc' : 'asc'})}">
+          Last Name
+          <span th:if="${sortBy == 'lastName'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
+      <th>
+        <a th:href="@{/players(sortBy='firstName', direction=${sortBy == 'firstName' && direction == 'asc' ? 'desc' : 'asc'})}">
+          First Name
+          <span th:if="${sortBy == 'firstName'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
+      <th>
+        <a th:href="@{/players(sortBy='allTeamNames', direction=${sortBy == 'allTeamNames' && direction == 'asc' ? 'desc' : 'asc'})}">
+          Team
+          <span th:if="${sortBy == 'allTeamNames'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
+      <th>
+        <a th:href="@{/players(sortBy='battingHand', direction=${sortBy == 'battingHand' && direction == 'asc' ? 'desc' : 'asc'})}">
+          Batting Hand
+          <span th:if="${sortBy == 'battingHand'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
+      <th>
+        <a th:href="@{/players(sortBy='throwingHand', direction=${sortBy == 'throwingHand' && direction == 'asc' ? 'desc' : 'asc'})}">
+          Throwing Hand
+          <span th:if="${sortBy == 'throwingHand'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
     </tr>
     </thead>
     <tbody>
     <tr th:each="player : ${players}">
-      <td th:text="${player.id}"></td>
-      <td th:text="${player.name}"></td>
-      <td th:text="${player.team}"></td>
-      <td th:text="${player.battingAverage}"></td>
-      <td>
-        <a th:href="@{/players/edit/{id}(id=${player.id})}">Edit</a> |
-        <a th:href="@{/players/delete/{id}(id=${player.id})}">Delete</a>
-      </td>
+      <td th:text="${player.lastName}"></td>
+      <td th:text="${player.firstName}"></td>
+      <td th:text="${player.allTeamNames}"></td>
+      <td th:text="${player.battingHand}"></td>
+      <td th:text="${player.throwingHand}"></td>
     </tr>
     </tbody>
   </table>
+
+  <!-- Pagination -->
+  <nav>
+    <ul class="pagination">
+      <li class="page-item" th:classappend="${currentPage == 1} ? 'disabled'">
+        <a class="page-link" th:href="@{/players(page=${currentPage - 1})}">Previous</a>
+      </li>
+      <li class="page-item" th:each="page : ${pages}" th:classappend="${currentPage == page} ? 'active'">
+        <a class="page-link" th:href="@{/players(page=${page})}" th:text="${page}"></a>
+      </li>
+      <li class="page-item" th:classappend="${currentPage == totalPages} ? 'disabled'">
+        <a class="page-link" th:href="@{/players(page=${currentPage + 1})}">Next</a>
+      </li>
+    </ul>
+  </nav>
 </main>
 
 <div th:replace="fragments/footer :: footer"></div>
