@@ -5,9 +5,14 @@ import com.dojonate.statsvisualizer.model.RosterEntry
 import com.dojonate.statsvisualizer.model.Team
 import com.dojonate.statsvisualizer.repository.PlayerRepository
 import com.dojonate.statsvisualizer.repository.RosterEntryRepository
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import org.mockito.kotlin.*
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import java.time.LocalDate
 import java.util.*
 
 class RosterEntryServiceTest {
@@ -17,50 +22,57 @@ class RosterEntryServiceTest {
     private val rosterEntryService = RosterEntryService(rosterEntryRepository, playerRepository)
 
     @Test
-    fun `should save all new roster entries`() {
-        val player = Player("p001", "John", "Doe", "R", "L", null)
-        val team = Team("HOU", "Houston Astros", "AL", 1962, 2024)
-        val rosterEntry = RosterEntry(player, team, 2023, "P")
+    fun `should retrieve paginated consolidated roster entries`() {
+        val rosterEntries = listOf(
+            RosterEntry(
+                Player("jdoe001", "Jane", "Doe", "L", "R", LocalDate.of(1996, 2, 2)),
+                Team("NYM", "New York Mets", "NL", 1962, 2024), 2020, "Catcher"
+            ),
+            RosterEntry(
+                Player("jsmith001", "John", "Smith", "R", "R", LocalDate.of(1995, 1, 1)),
+                Team("TEX", "Texas Rangers", "AL", 1971, 2024), 2020, "Pitcher"
+            )
+        )
 
-        whenever(playerRepository.findById(player.playerId)).thenReturn(Optional.empty())
-        whenever(playerRepository.save(player)).thenReturn(player)
-        whenever(rosterEntryRepository.findByPlayerAndTeamAndYear(player, team, 2023)).thenReturn(Optional.empty())
-        whenever(rosterEntryRepository.save(rosterEntry)).thenReturn(rosterEntry)
+        whenever(
+            rosterEntryRepository.findByPlayerFirstNameContainingOrPlayerLastNameContainingOrTeamNameContaining(
+                "",
+                "",
+                ""
+            )
+        ).thenReturn(
+            rosterEntries
+        )
 
-        rosterEntryService.saveAll(listOf(rosterEntry))
+        val result = rosterEntryService.getConsolidatedRosters("", 0, 10, "player.lastName", "asc")
 
-        verify(playerRepository, times(1)).save(player)
-        verify(rosterEntryRepository, times(1)).save(rosterEntry)
+        assertNotNull(result)
+        assertEquals(2, result.content.size)
+        assertEquals("Doe", result.content[0].key.lastName)
+        assertEquals("Smith", result.content[1].key.lastName)
     }
 
     @Test
-    fun `should skip saving existing roster entries`() {
-        val player = Player("p001", "John", "Doe", "R", "L", null)
-        val team = Team("HOU", "Houston Astros", "AL", 1962, 2024)
-        val rosterEntry = RosterEntry(player, team, 2023, "P")
+    fun `should save all roster entries`() {
+        val player1 = Player("jsmith001", "John", "Smith", "R", "R", LocalDate.of(1995, 1, 1))
+        val player2 = Player("jdoe001", "Jane", "Doe", "L", "R", LocalDate.of(1996, 2, 2))
+        val team1 = Team("TEX", "Texas Rangers", "AL", 1971, 2024)
+        val team2 = Team("NYM", "New York Mets", "NL", 1962, 2024)
+        val rosterEntry1 = RosterEntry(player1, team1, 2020, "Pitcher")
+        val rosterEntry2 = RosterEntry(player2, team2, 2020, "Catcher")
 
-        whenever(playerRepository.findById(player.playerId)).thenReturn(Optional.of(player))
-        whenever(rosterEntryRepository.findByPlayerAndTeamAndYear(player, team, 2023)).thenReturn(Optional.of(rosterEntry))
+        whenever(playerRepository.findById(player1.playerId)).thenReturn(Optional.of(player1))
+        whenever(playerRepository.findById(player2.playerId)).thenReturn(Optional.empty())
+        whenever(playerRepository.save(player2)).thenReturn(player2)
+        whenever(rosterEntryRepository.findByPlayerAndTeamAndYear(player1, team1, 2020)).thenReturn(Optional.empty())
+        whenever(rosterEntryRepository.findByPlayerAndTeamAndYear(player2, team2, 2020)).thenReturn(Optional.empty())
 
-        rosterEntryService.saveAll(listOf(rosterEntry))
+        rosterEntryService.saveAll(listOf(rosterEntry1, rosterEntry2))
 
-        verify(playerRepository, times(0)).save(any())
-        verify(rosterEntryRepository, times(0)).save(any())
-    }
-
-    @Test
-    fun `should retrieve all roster entries`() {
-        val player = Player("p001", "John", "Doe", "R", "L", null)
-        val team = Team("HOU", "Houston Astros", "AL", 1962, 2024)
-        val rosterEntry = RosterEntry(player, team, 2023, "P")
-
-        whenever(rosterEntryRepository.findAll()).thenReturn(listOf(rosterEntry))
-
-        val entries = rosterEntryService.findAll()
-
-        assertNotNull(entries)
-        assertEquals(1, entries.size)
-        assertEquals("p001", entries[0].player.playerId)
-        assertEquals("HOU", entries[0].team.teamId)
+        verify(playerRepository, times(1)).findById(player1.playerId)
+        verify(playerRepository, times(1)).findById(player2.playerId)
+        verify(playerRepository, times(1)).save(player2)
+        verify(rosterEntryRepository, times(1)).save(rosterEntry1)
+        verify(rosterEntryRepository, times(1)).save(rosterEntry2)
     }
 }

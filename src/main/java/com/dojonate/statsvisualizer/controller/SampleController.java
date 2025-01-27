@@ -1,6 +1,5 @@
 package com.dojonate.statsvisualizer.controller;
 
-import com.dojonate.statsvisualizer.model.RosterEntry;
 import com.dojonate.statsvisualizer.service.PlayerService;
 import com.dojonate.statsvisualizer.service.RosterEntryService;
 import com.dojonate.statsvisualizer.service.TeamService;
@@ -8,17 +7,13 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
-import java.util.List;
-
 @Controller
 public class SampleController {
 
     private final PlayerService playerService;
-    private final RosterEntryService rosterEntryService;
 
     public SampleController(PlayerService playerService, RosterEntryService rosterEntryService, TeamService teamService) {
         this.playerService = playerService;
-        this.rosterEntryService = rosterEntryService;
     }
 
     @GetMapping("/test-db")
@@ -26,12 +21,12 @@ public class SampleController {
         return "Player count: " + playerService.findAll().size();
     }
 
-    @GetMapping("/rosters")
-    public String getAllRosters(Model model) {
-        List<RosterEntry> rosters = rosterEntryService.findAll();
-        model.addAttribute("rosters", rosters);
-        return "rosters";
-    }
+//    @GetMapping("/rosters")
+//    public String getAllRosters(Model model) {
+//        List<RosterEntry> rosters = rosterEntryService.findAll();
+//        model.addAttribute("rosters", rosters);
+//        return "rosters";
+//    }
 
 //    @GetMapping("/teams")
 //    public String getAllTeams(Model model) {
