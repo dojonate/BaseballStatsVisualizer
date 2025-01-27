@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/styles-scripts :: styles('Teams')}"></head>
+<body>
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main class="container">
+    <h1 class="center-align white-text">Teams</h1>
+
+    <!-- Search Bar -->
+    <form class="row" method="get" th:action="@{/teams}">
+        <div class="input-field col s12 m6">
+            <input class="white-text" id="search" name="search" th:value="${search}" type="text">
+            <label class="white-text" for="search">Search by team name or league</label>
+        </div>
+        <div class="input-field col s12 m6">
+            <button class="btn waves-effect waves-light" type="submit">Search</button>
+        </div>
+    </form>
+
+    <!-- Teams Table -->
+    <div class="card grey darken-3">
+        <div class="card-content">
+            <table class="highlight responsive-table">
+                <thead>
+                <tr>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='name', direction=${sortBy == 'teamName' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Team Name
+                            <span th:if="${sortBy == 'name'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='teamId', direction=${sortBy == 'teamId' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Abbreviation
+                            <span th:if="${sortBy == 'teamId'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='firstYear', direction=${sortBy == 'firstYear' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            First Year of Play
+                            <span th:if="${sortBy == 'firstYear'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='lastYear', direction=${sortBy == 'lastYear' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Final Year of Play
+                            <span th:if="${sortBy == 'lastYear'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='league', direction=${sortBy == 'league' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            League
+                            <span th:if="${sortBy == 'league'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="team : ${teams}">
+                    <td class="white-text" th:text="${team.name}"></td>
+                    <td class="white-text" th:text="${team.teamId}"></td>
+                    <td class="white-text" th:text="${team.firstYear}"></td>
+                    <td class="white-text">
+                    <span th:if="${(team.lastYear == T(java.time.Year).now().getValue()) || (team.lastYear == (T(java.time.Year).now().getValue() - 1)) }"
+                          th:text="'Active'"></span>
+                        <span th:if="${(team.lastYear != T(java.time.Year).now().getValue()) && (team.lastYear != T(java.time.Year).now().getValue() - 1)}"
+                              th:text="${team.lastYear}"></span>
+                    </td>
+                    <td class="white-text" th:text="${team.league}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div th:replace="~{fragments/pagination :: pagination(${currentPage}, ${totalPages}, ${search}, '/teams')}"></div>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>
