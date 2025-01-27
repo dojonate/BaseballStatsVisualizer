@@ -24,40 +24,22 @@
             <table class="highlight responsive-table">
                 <thead>
                 <tr>
-                    <th class="white-text">
-                        <a th:href="@{/rosters(sortBy='player.firstName', direction=${sortBy == 'player.firstName' && direction == 'asc' ? 'desc' : 'asc'})}">
-                            Player First Name
-                            <span th:if="${sortBy == 'player.firstName'}"
-                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
-                        </a>
-                    </th>
-                    <th class="white-text">
-                        <a th:href="@{/rosters(sortBy='player.lastName', direction=${sortBy == 'player.lastName' && direction == 'asc' ? 'desc' : 'asc'})}">
-                            Player Last Name
-                            <span th:if="${sortBy == 'player.lastName'}"
-                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
-                        </a>
-                    </th>
-                    <th class="white-text">
-                        <a th:href="@{/rosters(sortBy='team.name', direction=${sortBy == 'team.name' && direction == 'asc' ? 'desc' : 'asc'})}">
-                            Team Name
-                            <span th:if="${sortBy == 'team.name'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
-                        </a>
-                    </th>
-                    <th class="white-text">
-                        <a th:href="@{/rosters(sortBy='position', direction=${sortBy == 'position' && direction == 'asc' ? 'desc' : 'asc'})}">
-                            Position
-                            <span th:if="${sortBy == 'position'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
-                        </a>
-                    </th>
+                    <th class="white-text">Player First Name</th>
+                    <th class="white-text">Player Last Name</th>
+                    <th class="white-text">Team Name</th>
+                    <th class="white-text">Position</th>
+                    <th class="white-text">Years</th>
                 </tr>
                 </thead>
                 <tbody>
-                <tr th:each="roster : ${rosters}">
-                    <td class="white-text" th:text="${roster.player.firstName}"></td>
-                    <td class="white-text" th:text="${roster.player.lastName}"></td>
-                    <td class="white-text" th:text="${roster.team.name}"></td>
-                    <td class="white-text" th:text="${roster.position}"></td>
+                <tr th:each="entry : ${consolidatedRosters}">
+                    <td class="white-text" th:text="${entry.key.firstName}"></td>
+                    <td class="white-text" th:text="${entry.key.lastName}"></td>
+                    <td class="white-text" th:each="team : ${entry.value}">
+                        <span th:text="${team.key.name}"></span>
+                        <span th:text="${team.value}"></span>
+                    </td>
+                    <td class="white-text" th:text="${entry.key.position}"></td>
                 </tr>
                 </tbody>
             </table>

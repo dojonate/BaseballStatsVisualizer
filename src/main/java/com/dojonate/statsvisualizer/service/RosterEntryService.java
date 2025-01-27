@@ -2,6 +2,7 @@ package com.dojonate.statsvisualizer.service;
 
 import com.dojonate.statsvisualizer.model.Player;
 import com.dojonate.statsvisualizer.model.RosterEntry;
+import com.dojonate.statsvisualizer.model.Team;
 import com.dojonate.statsvisualizer.repository.PlayerRepository;
 import com.dojonate.statsvisualizer.repository.RosterEntryRepository;
 import org.springframework.data.domain.Page;
@@ -10,8 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 public class RosterEntryService {
@@ -44,7 +44,65 @@ public class RosterEntryService {
         return rosterEntryRepository.findByPlayerFirstNameContainingOrPlayerLastNameContainingOrTeamNameContaining(search, search, search, pageable);
     }
 
-    public List<RosterEntry> findAll() {
-        return rosterEntryRepository.findAll();
+    public Map<Player, Map<Team, String>> getConsolidatedRosters(String search, int page, int size, String sortBy, String direction) {
+        Page<RosterEntry> rostersPage = getRosters(search, page, size, sortBy, direction);
+        List<RosterEntry> rosterEntries = rostersPage.getContent();
+
+        Map<Player, Map<Team, List<Integer>>> groupedEntries = new HashMap<>();
+
+        for (RosterEntry entry : rosterEntries) {
+            groupedEntries
+                    .computeIfAbsent(entry.getPlayer(), k -> new HashMap<>())
+                    .computeIfAbsent(entry.getTeam(), k -> new ArrayList<>())
+                    .add(entry.getYear());
+        }
+
+        Map<Player, Map<Team, String>> consolidatedEntries = new HashMap<>();
+
+        for (Map.Entry<Player, Map<Team, List<Integer>>> playerEntry : groupedEntries.entrySet()) {
+            Map<Team, String> teamYears = new HashMap<>();
+            for (Map.Entry<Team, List<Integer>> teamEntry : playerEntry.getValue().entrySet()) {
+                List<Integer> years = teamEntry.getValue();
+                Collections.sort(years);
+                teamYears.put(teamEntry.getKey(), consolidateYears(years));
+            }
+            consolidatedEntries.put(playerEntry.getKey(), teamYears);
+        }
+
+        return consolidatedEntries;
     }
+
+    private String consolidateYears(List<Integer> years) {
+        if (years.isEmpty()) return "";
+
+        List<String> ranges = new ArrayList<>();
+        int start = years.get(0);
+        int end = start;
+
+        for (int i = 1; i < years.size(); i++) {
+            if (years.get(i) == end + 1) {
+                end = years.get(i);
+            } else {
+                if (start == end) {
+                    ranges.add(String.valueOf(start));
+                } else {
+                    ranges.add(start + "-" + end);
+                }
+                start = years.get(i);
+                end = start;
+            }
+        }
+
+        if (start == end) {
+            ranges.add(String.valueOf(start));
+        } else {
+            ranges.add(start + "-" + end);
+        }
+
+        return String.join("; ", ranges);
+    }
+
+//    public List<RosterEntry> findAll() {
+//        return rosterEntryRepository.findAll();
+//    }
 }
