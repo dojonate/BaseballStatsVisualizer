@@ -12,9 +12,6 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.springframework.data.domain.PageImpl
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import java.time.LocalDate
 import java.util.*
 
@@ -25,7 +22,7 @@ class RosterEntryServiceTest {
     private val rosterEntryService = RosterEntryService(rosterEntryRepository, playerRepository)
 
     @Test
-    fun `should retrieve paginated roster entries`() {
+    fun `should retrieve paginated consolidated roster entries`() {
         val rosterEntries = listOf(
             RosterEntry(
                 Player("jdoe001", "Jane", "Doe", "L", "R", LocalDate.of(1996, 2, 2)),
@@ -36,26 +33,23 @@ class RosterEntryServiceTest {
                 Team("TEX", "Texas Rangers", "AL", 1971, 2024), 2020, "Pitcher"
             )
         )
-        val pageable = PageRequest.of(0, 10, Sort.Direction.ASC, "player.lastName")
-        val pagedResult = PageImpl(rosterEntries, pageable, rosterEntries.size.toLong())
 
         whenever(
             rosterEntryRepository.findByPlayerFirstNameContainingOrPlayerLastNameContainingOrTeamNameContaining(
                 "",
                 "",
-                "",
-                pageable
+                ""
             )
         ).thenReturn(
-            pagedResult
+            rosterEntries
         )
 
-        val result = rosterEntryService.getRosters("", 0, 10, "player.lastName", "asc")
+        val result = rosterEntryService.getConsolidatedRosters("", 0, 10, "player.lastName", "asc")
 
         assertNotNull(result)
         assertEquals(2, result.content.size)
-        assertEquals("Doe", result.content[0].player.lastName)
-        assertEquals("Smith", result.content[1].player.lastName)
+        assertEquals("Doe", result.content[0].key.lastName)
+        assertEquals("Smith", result.content[1].key.lastName)
     }
 
     @Test
