@@ -32,8 +32,10 @@ public class RostersViewController {
         Page<Map.Entry<Player, Map<Team, Map.Entry<String, String>>>> consolidatedRosters = rosterEntryService.getConsolidatedRosters(search, page - 1, size, sortBy, direction);
         model.addAttribute("consolidatedRosters", consolidatedRosters);
         model.addAttribute("currentPage", page);
-        model.addAttribute("totalPages", 1); // Adjust as needed
+        model.addAttribute("totalPages", consolidatedRosters.getTotalPages());
         model.addAttribute("search", search);
+        model.addAttribute("sortBy", sortBy);
+        model.addAttribute("direction", direction);
         return "rosters";
     }
 }

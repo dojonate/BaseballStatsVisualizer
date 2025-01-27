@@ -60,6 +60,17 @@ public class RosterEntryService {
             consolidatedEntries.add(Map.entry(playerEntry.getKey(), teamYears));
         }
 
+        // Sort the consolidatedEntries list based on sortBy and direction
+        consolidatedEntries.sort((entry1, entry2) -> {
+            int comparison = switch (sortBy) {
+                case "player.firstName" -> entry1.getKey().getFirstName().compareTo(entry2.getKey().getFirstName());
+                case "player.lastName" -> entry1.getKey().getLastName().compareTo(entry2.getKey().getLastName());
+                default -> 0;
+                // Add more cases if needed
+            };
+            return "asc".equals(direction) ? comparison : -comparison;
+        });
+
         int start = Math.min(page * size, consolidatedEntries.size());
         int end = Math.min((page + 1) * size, consolidatedEntries.size());
         List<Map.Entry<Player, Map<Team, Map.Entry<String, String>>>> paginatedList = consolidatedEntries.subList(start, end);

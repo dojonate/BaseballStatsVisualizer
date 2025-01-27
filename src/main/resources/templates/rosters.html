@@ -14,6 +14,8 @@
             <label class="white-text" for="search">Search by player name or team</label>
         </div>
         <div class="input-field col s12 m6">
+            <input name="sortBy" th:value="${sortBy}" type="hidden">
+            <input name="direction" th:value="${direction}" type="hidden">
             <button class="btn waves-effect waves-light" type="submit">Search</button>
         </div>
     </form>
@@ -24,21 +26,44 @@
             <table class="highlight responsive-table">
                 <thead>
                 <tr>
-                    <th class="white-text">Player First Name</th>
-                    <th class="white-text">Player Last Name</th>
-                    <th class="white-text">Team Name</th>
-                    <th class="white-text">Position</th>
-                    <th class="white-text">Years</th>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='player.firstName', direction=${sortBy == 'player.firstName' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Player First Name
+                            <span th:if="${sortBy == 'player.firstName'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='player.lastName', direction=${sortBy == 'player.lastName' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Player Last Name
+                            <span th:if="${sortBy == 'player.lastName'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">Teams</th>
                 </tr>
                 </thead>
                 <tbody>
-                <tr th:each="entry : ${consolidatedRosters}">
+                <tr th:each="entry : ${consolidatedRosters.content}">
                     <td class="white-text" th:text="${entry.key.firstName}"></td>
                     <td class="white-text" th:text="${entry.key.lastName}"></td>
-                    <td class="white-text" th:each="teamEntry : ${entry.value}">
-                        <span th:text="${teamEntry.key.name}"></span>
-                        <span th:text="${teamEntry.value.key}"></span> <!-- Position -->
-                        <span th:text="${teamEntry.value.value}"></span> <!-- Years -->
+                    <td>
+                        <table class="highlight responsive-table">
+                            <thead>
+                            <tr>
+                                <th class="white-text" style="width: 150px;">Team Name</th>
+                                <th class="white-text" style="width: 100px;">Position</th>
+                                <th class="white-text" style="width: 100px;">Years</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="teamEntry : ${entry.value}">
+                                <td class="white-text" th:text="${teamEntry.key.name}"></td>
+                                <td class="white-text" th:text="${teamEntry.value.key}"></td>
+                                <td class="white-text" th:text="${teamEntry.value.value}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
                     </td>
                 </tr>
                 </tbody>
@@ -47,9 +72,9 @@
     </div>
 
     <!-- Pagination -->
-    <div th:replace="~{fragments/pagination :: pagination(${currentPage}, ${totalPages}, ${search}, '/rosters')}"></div>
+    <div th:replace="~{fragments/pagination :: pagination(${consolidatedRosters.number + 1}, ${consolidatedRosters.totalPages}, ${search}, '/rosters')}"></div>
 </main>
-r
+
 <div th:replace="~{fragments/footer :: footer}"></div>
 <div th:replace="~{fragments/styles-scripts :: scripts}"></div>
 </body>
