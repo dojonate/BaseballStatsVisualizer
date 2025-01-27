@@ -10,6 +10,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -38,7 +41,9 @@ class TeamsViewControllerTest {
             Team("ACY", "Atlantic City Bacharach Giants", "ECL", 1916, 1929),
             Team("ANA", "Anaheim Angels", "AL", 1997, 2024)
         )
-        Mockito.`when`(teamService.findAll()).thenReturn(teams)
+        val pageable = PageRequest.of(0, 10)
+        val teamsPage: Page<Team> = PageImpl(teams, pageable, teams.size.toLong())
+        Mockito.`when`(teamService.getTeams("", 0, 10, "name", "asc")).thenReturn(teamsPage)
 
         // Act & Assert
         mockMvc.perform(
@@ -49,5 +54,8 @@ class TeamsViewControllerTest {
             .andExpect(view().name("teams"))
             .andExpect(model().attributeExists("teams"))
             .andExpect(model().attribute("teams", teams))
+            .andExpect(model().attributeExists("currentPage"))
+            .andExpect(model().attributeExists("totalPages"))
+            .andExpect(model().attributeExists("search"))
     }
 }
