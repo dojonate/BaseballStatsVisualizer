@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/styles-scripts :: styles('Rosters')}"></head>
+<body class="grey darken-4">
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main class="container">
+    <h1 class="center-align white-text">Rosters</h1>
+
+    <!-- Search Bar -->
+    <form class="row" method="get" th:action="@{/rosters}">
+        <div class="input-field col s12 m6">
+            <input class="white-text" id="search" name="search" th:value="${search}" type="text">
+            <label class="white-text" for="search">Search by player name or team</label>
+        </div>
+        <div class="input-field col s12 m6">
+            <button class="btn waves-effect waves-light" type="submit">Search</button>
+        </div>
+    </form>
+
+    <!-- Rosters Table -->
+    <div class="card grey darken-3">
+        <div class="card-content">
+            <table class="highlight responsive-table">
+                <thead>
+                <tr>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='player.firstName', direction=${sortBy == 'player.firstName' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Player First Name
+                            <span th:if="${sortBy == 'player.firstName'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='player.lastName', direction=${sortBy == 'player.lastName' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Player Last Name
+                            <span th:if="${sortBy == 'player.lastName'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='team.name', direction=${sortBy == 'team.name' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Team Name
+                            <span th:if="${sortBy == 'team.name'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='position', direction=${sortBy == 'position' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Position
+                            <span th:if="${sortBy == 'position'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="roster : ${rosters}">
+                    <td class="white-text" th:text="${roster.player.firstName}"></td>
+                    <td class="white-text" th:text="${roster.player.lastName}"></td>
+                    <td class="white-text" th:text="${roster.team.name}"></td>
+                    <td class="white-text" th:text="${roster.position}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div th:replace="~{fragments/pagination :: pagination(${currentPage}, ${totalPages}, ${search}, '/rosters')}"></div>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>

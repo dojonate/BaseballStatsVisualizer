@@ -4,6 +4,10 @@ import com.dojonate.statsvisualizer.model.Player;
 import com.dojonate.statsvisualizer.model.RosterEntry;
 import com.dojonate.statsvisualizer.repository.PlayerRepository;
 import com.dojonate.statsvisualizer.repository.RosterEntryRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -33,6 +37,11 @@ public class RosterEntryService {
                 rosterEntryRepository.save(entry);
             }
         }
+    }
+
+    public Page<RosterEntry> getRosters(String search, int page, int size, String sortBy, String direction) {
+        Pageable pageable = PageRequest.of(page, size, Sort.Direction.fromString(direction), sortBy);
+        return rosterEntryRepository.findByPlayerFirstNameContainingOrPlayerLastNameContainingOrTeamNameContaining(search, search, search, pageable);
     }
 
     public List<RosterEntry> findAll() {

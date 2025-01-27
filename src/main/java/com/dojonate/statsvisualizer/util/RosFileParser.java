@@ -49,11 +49,6 @@ public class RosFileParser {
         player.setThrowingHand(fields[4].trim());
 
         // Create a RosterEntry object
-        RosterEntry rosterEntry = new RosterEntry();
-        rosterEntry.setPlayer(player);
-        rosterEntry.setTeam(team);
-        rosterEntry.setYear(year);
-        rosterEntry.setPosition(fields[6].trim());
-        return rosterEntry;
+        return new RosterEntry(player, team, year, fields[6].trim());
     }
 }
