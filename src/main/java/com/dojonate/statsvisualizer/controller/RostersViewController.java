@@ -28,7 +28,7 @@ public class RostersViewController {
             @RequestParam(defaultValue = "asc") String direction,
             Model model
     ) {
-        Map<Player, Map<Team, String>> consolidatedRosters = rosterEntryService.getConsolidatedRosters(search, page - 1, size, sortBy, direction);
+        Map<Player, Map<Team, Map.Entry<String, String>>> consolidatedRosters = rosterEntryService.getConsolidatedRosters(search, page - 1, size, sortBy, direction);
         model.addAttribute("consolidatedRosters", consolidatedRosters);
         model.addAttribute("currentPage", page);
         model.addAttribute("totalPages", 1); // Adjust as needed

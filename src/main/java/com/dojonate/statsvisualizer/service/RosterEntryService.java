@@ -44,27 +44,27 @@ public class RosterEntryService {
         return rosterEntryRepository.findByPlayerFirstNameContainingOrPlayerLastNameContainingOrTeamNameContaining(search, search, search, pageable);
     }
 
-    public Map<Player, Map<Team, String>> getConsolidatedRosters(String search, int page, int size, String sortBy, String direction) {
+    public Map<Player, Map<Team, Map.Entry<String, String>>> getConsolidatedRosters(String search, int page, int size, String sortBy, String direction) {
         Page<RosterEntry> rostersPage = getRosters(search, page, size, sortBy, direction);
         List<RosterEntry> rosterEntries = rostersPage.getContent();
 
-        Map<Player, Map<Team, List<Integer>>> groupedEntries = new HashMap<>();
+        Map<Player, Map<Team, List<RosterEntry>>> groupedEntries = new HashMap<>();
 
         for (RosterEntry entry : rosterEntries) {
             groupedEntries
                     .computeIfAbsent(entry.getPlayer(), k -> new HashMap<>())
                     .computeIfAbsent(entry.getTeam(), k -> new ArrayList<>())
-                    .add(entry.getYear());
+                    .add(entry);
         }
 
-        Map<Player, Map<Team, String>> consolidatedEntries = new HashMap<>();
+        Map<Player, Map<Team, Map.Entry<String, String>>> consolidatedEntries = new HashMap<>();
 
-        for (Map.Entry<Player, Map<Team, List<Integer>>> playerEntry : groupedEntries.entrySet()) {
-            Map<Team, String> teamYears = new HashMap<>();
-            for (Map.Entry<Team, List<Integer>> teamEntry : playerEntry.getValue().entrySet()) {
-                List<Integer> years = teamEntry.getValue();
-                Collections.sort(years);
-                teamYears.put(teamEntry.getKey(), consolidateYears(years));
+        for (Map.Entry<Player, Map<Team, List<RosterEntry>>> playerEntry : groupedEntries.entrySet()) {
+            Map<Team, Map.Entry<String, String>> teamYears = new HashMap<>();
+            for (Map.Entry<Team, List<RosterEntry>> teamEntry : playerEntry.getValue().entrySet()) {
+                List<Integer> years = teamEntry.getValue().stream().map(RosterEntry::getYear).sorted().toList();
+                String position = teamEntry.getValue().get(0).getPosition(); // Assuming position is the same for all entries
+                teamYears.put(teamEntry.getKey(), Map.entry(position, consolidateYears(years)));
             }
             consolidatedEntries.put(playerEntry.getKey(), teamYears);
         }

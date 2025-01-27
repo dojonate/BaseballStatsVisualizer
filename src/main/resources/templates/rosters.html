@@ -35,11 +35,11 @@
                 <tr th:each="entry : ${consolidatedRosters}">
                     <td class="white-text" th:text="${entry.key.firstName}"></td>
                     <td class="white-text" th:text="${entry.key.lastName}"></td>
-                    <td class="white-text" th:each="team : ${entry.value}">
-                        <span th:text="${team.key.name}"></span>
-                        <span th:text="${team.value}"></span>
+                    <td class="white-text" th:each="teamEntry : ${entry.value}">
+                        <span th:text="${teamEntry.key.name}"></span>
+                        <span th:text="${teamEntry.value.key}"></span> <!-- Position -->
+                        <span th:text="${teamEntry.value.value}"></span> <!-- Years -->
                     </td>
-                    <td class="white-text" th:text="${entry.key.position}"></td>
                 </tr>
                 </tbody>
             </table>
@@ -49,7 +49,7 @@
     <!-- Pagination -->
     <div th:replace="~{fragments/pagination :: pagination(${currentPage}, ${totalPages}, ${search}, '/rosters')}"></div>
 </main>
-
+r
 <div th:replace="~{fragments/footer :: footer}"></div>
 <div th:replace="~{fragments/styles-scripts :: scripts}"></div>
 </body>
