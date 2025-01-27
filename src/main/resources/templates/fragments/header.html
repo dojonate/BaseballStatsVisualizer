@@ -1,16 +1,35 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
 <body>
 <div th:fragment="header">
-  <nav>
-    <ul>
-      <li><a th:href="@{/}">Home</a></li>
-      <li><a th:href="@{/players}">Player Stats</a></li>
-      <li><a th:href="@{/teams}">Team Stats</a></li>
-      <li><a th:href="@{/rosters}">Roster Stats</a></li>
-      <!-- Add more navigation links as needed -->
-    </ul>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <a class="navbar-brand" th:href="@{/}">Stats Visualizer</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/}">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/players}">Players</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/teams}">Teams</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/rosters}">Rosters</a>
+        </li>
+      </ul>
+    </div>
   </nav>
 </div>
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>

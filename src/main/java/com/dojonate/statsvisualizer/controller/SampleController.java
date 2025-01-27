@@ -1,6 +1,5 @@
 package com.dojonate.statsvisualizer.controller;
 
-import com.dojonate.statsvisualizer.model.Player;
 import com.dojonate.statsvisualizer.model.RosterEntry;
 import com.dojonate.statsvisualizer.model.Team;
 import com.dojonate.statsvisualizer.service.PlayerService;
@@ -13,13 +12,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import java.util.List;
 
 @Controller
-public class TestController {
+public class SampleController {
 
     private final PlayerService playerService;
     private final RosterEntryService rosterEntryService;
     private final TeamService teamService;
 
-    public TestController(PlayerService playerService, RosterEntryService rosterEntryService, TeamService teamService) {
+    public SampleController(PlayerService playerService, RosterEntryService rosterEntryService, TeamService teamService) {
         this.playerService = playerService;
         this.rosterEntryService = rosterEntryService;
         this.teamService = teamService;
@@ -28,13 +27,6 @@ public class TestController {
     @GetMapping("/test-db")
     public String testDatabase() {
         return "Player count: " + playerService.findAll().size();
-    }
-
-    @GetMapping("/players")
-    public String getAllPlayers(Model model) {
-        List<Player> players = playerService.findAll();
-        model.addAttribute("players", players);
-        return "players";
     }
 
     @GetMapping("/rosters")
@@ -49,5 +41,26 @@ public class TestController {
         List<Team> teams = teamService.findAll();
         model.addAttribute("teams", teams);
         return "teams";
+    }
+
+    // Placeholder for player details page
+    @GetMapping("/player-details")
+    public String playerDetails(Model model) {
+        model.addAttribute("message", "This is a placeholder for the player details page.");
+        return "player-details";
+    }
+
+    // Placeholder for a team stats page
+    @GetMapping("/team-stats")
+    public String teamStats(Model model) {
+        model.addAttribute("message", "This is a placeholder for the team stats page.");
+        return "team-stats";
+    }
+
+    // Placeholder for a leaderboard page
+    @GetMapping("/leaderboard")
+    public String leaderboard(Model model) {
+        model.addAttribute("message", "This is a placeholder for the leaderboard page.");
+        return "leaderboard";
     }
 }
