@@ -29,13 +29,6 @@ public class SampleController {
         return "Player count: " + playerService.findAll().size();
     }
 
-//    @GetMapping("/players")
-//    public String getAllPlayers(Model model) {
-//        List<Player> players = playerService.findAll();
-//        model.addAttribute("players", players);
-//        return "players";
-//    }
-
     @GetMapping("/rosters")
     public String getAllRosters(Model model) {
         List<RosterEntry> rosters = rosterEntryService.findAll();
@@ -48,5 +41,26 @@ public class SampleController {
         List<Team> teams = teamService.findAll();
         model.addAttribute("teams", teams);
         return "teams";
+    }
+
+    // Placeholder for player details page
+    @GetMapping("/player-details")
+    public String playerDetails(Model model) {
+        model.addAttribute("message", "This is a placeholder for the player details page.");
+        return "player-details";
+    }
+
+    // Placeholder for a team stats page
+    @GetMapping("/team-stats")
+    public String teamStats(Model model) {
+        model.addAttribute("message", "This is a placeholder for the team stats page.");
+        return "team-stats";
+    }
+
+    // Placeholder for a leaderboard page
+    @GetMapping("/leaderboard")
+    public String leaderboard(Model model) {
+        model.addAttribute("message", "This is a placeholder for the leaderboard page.");
+        return "leaderboard";
     }
 }

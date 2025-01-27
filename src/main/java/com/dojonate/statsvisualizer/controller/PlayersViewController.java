@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Controller
-public class PlayersController {
+public class PlayersViewController {
 
     @Autowired
     private PlayerService playerService;
