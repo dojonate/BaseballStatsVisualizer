@@ -1,9 +1,13 @@
 package com.dojonate.statsvisualizer.service;
 
-import com.dojonate.statsvisualizer.model.Player;
 import com.dojonate.statsvisualizer.model.Team;
 import com.dojonate.statsvisualizer.repository.TeamRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+
 import java.util.List;
 
 @Service
@@ -30,7 +34,8 @@ public class TeamService {
                 existingTeam.setFirstYear(team.getFirstYear());
                 existingTeam.setLastYear(team.getLastYear());
                 teamRepository.save(existingTeam);
-            }, () -> {
+            }, () ->
+            {
                 // Save new team if it doesn't exist
                 teamRepository.save(team);
             });
@@ -39,5 +44,17 @@ public class TeamService {
 
     public List<Team> findAll() {
         return teamRepository.findAll();
+    }
+
+    // Paginated and sortable retrieval of teams
+    public Page<Team> getTeams(String search, int page, int size, String sortBy, String direction) {
+        Pageable pageable = PageRequest.of(page, size,
+                "asc".equalsIgnoreCase(direction)
+                        ? Sort.by(sortBy).ascending()
+                        : Sort.by(sortBy).descending());
+        if (search != null && !search.isEmpty()) {
+            return teamRepository.findByNameContainingIgnoreCase(search, pageable);
+        }
+        return teamRepository.findAll(pageable);
     }
 }

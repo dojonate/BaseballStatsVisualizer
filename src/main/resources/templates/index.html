@@ -1,17 +1,15 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Baseball Stats Visualizer</title>
-</head>
+<head th:replace="~{fragments/styles-scripts :: styles('Home')}"></head>
 <body>
-<div th:replace="fragments/header :: header"></div>
+<div th:replace="~{fragments/header :: header}"></div>
 
 <main>
     <h1>Welcome to the Baseball Stats Visualizer</h1>
     <p>Use the navigation menu to explore players and statistics.</p>
 </main>
 
-<div th:replace="fragments/footer :: footer"></div>
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
 </body>
 </html>
