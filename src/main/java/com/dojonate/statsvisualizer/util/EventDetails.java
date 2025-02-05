@@ -1,6 +1,7 @@
 package com.dojonate.statsvisualizer.util;
 
 import com.dojonate.statsvisualizer.model.EventType;
+import com.dojonate.statsvisualizer.model.Position;
 import com.dojonate.statsvisualizer.model.RunnerAdvance;
 
 import java.util.ArrayList;
@@ -10,10 +11,12 @@ public class EventDetails {
     private final List<EventType> eventType;
     private String description;
     private List<RunnerAdvance> runnerAdvances; // e.g., "1-2", "2-H"
+    private final List<Position> playSequence;
 
     public EventDetails() {
         this.eventType = new ArrayList<>();
         this.runnerAdvances = new ArrayList<>();
+        this.playSequence = new ArrayList<>();
     }
 
     public EventDetails(String event) {
@@ -62,14 +65,31 @@ public class EventDetails {
                 part = part.replace("-", "");
                 eventType.add(EventType.fromAbbreviation(part));
             } else if (part.matches(".*\\d.*")) { // Check if part contains a digit
-                String eventPart = part.replaceAll("\\d", ""); // Extract alphabet characters
-                String positionsPart = part.replaceAll("\\D", ""); // Extract digit characters
-                // TODO: handle digits as player references
-                System.out.println("Player reference ID(s): " + positionsPart); // Placeholder handling
-                if (eventPart.equals("HR")) {
-                    eventType.add(EventType.INSIDE_THE_PARK_HOME_RUN);
+                String eventPart = part.replaceAll("[^a-zA-Z]", ""); // Extract alphabet characters
+                String positionsPart = part.replaceAll("[^\\d()]", ""); // Extract digit characters and parentheses
+                if (!positionsPart.isEmpty() && eventPart.isEmpty()) {
+                    boolean isRunner = false;
+                    // Handle multiple player references (e.g., "23")
+                    for (char position : positionsPart.toCharArray()) {
+                        if (position == '(' || position == ')') {
+                            isRunner = position == '(';
+                            continue;
+                        } else if (isRunner) {
+                            isRunner = false;
+                            // TODO: Store runner out
+                            continue;
+                        }
+                        int index = Character.getNumericValue(position);
+                        Position.fromPositionNumber(index); // Placeholder handling
+                        playSequence.add(Position.fromPositionNumber(Character.getNumericValue(position)));
+                    }
                 } else {
-                    eventType.add(EventType.fromAbbreviation(eventPart));
+                    System.out.println("Player reference ID(s): " + positionsPart); // Placeholder handling
+                    if (eventPart.equals("HR")) {
+                        eventType.add(EventType.INSIDE_THE_PARK_HOME_RUN);
+                    } else {
+                        eventType.add(EventType.fromAbbreviation(eventPart));
+                    }
                 }
             } else {
                 setEventType(EventType.fromAbbreviation(part)); // First part is the event type (e.g., "S8", "K", "HR")
@@ -114,7 +134,17 @@ public class EventDetails {
 
     private String buildDescription() {
         StringBuilder description = new StringBuilder();
-        description.append("Event: ").append(getEventType());
+        description.append("Event: ");
+        if (!playSequence.isEmpty()) {
+            for (Position position : playSequence.subList(0, playSequence.size() - 1)) {
+                description.append(position.getPositionNumber()).append("-");
+            }
+            description.append(playSequence.get(playSequence.size() - 1).getPositionNumber()).append(" ");
+        }
+        for (EventType event : getEventType().subList(0, getEventType().size() - 1)) {
+            description.append(event.getDescription()).append(" ");
+        }
+        description.append(getEventType().get(getEventType().size() - 1).getDescription());
         if (!getRunnerAdvances().isEmpty()) {
             description.append(", Runner Advances: ");
             for (RunnerAdvance advance : getRunnerAdvances()) {

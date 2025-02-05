@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
 import java.util.*;
 
 @Component
@@ -20,21 +22,13 @@ public class EventFileParser {
     @Autowired
     private final TeamService teamService;
 
-//    @Autowired
-//    private final GameService gameService;
-//
-//    @Autowired
-//    private final PlayerEventService playerEventService;
-//
-//    @Autowired
-//    private final RosterEntryService rosterEntryService;
+    private final SiteService siteService;
+    String gameDate;
 
-    EventFileParser(TeamService teamService, PlayerService playerService, GameService gameService, PlayerEventService playerEventService, RosterEntryService rosterEntryService) {
+    public EventFileParser(TeamService teamService, PlayerService playerService, SiteService siteService, GameService gameService, PlayerEventService playerEventService, RosterEntryService rosterEntryService) {
         this.teamService = teamService;
         this.playerService = playerService;
-//        this.gameService = gameService;
-//        this.playerEventService = playerEventService;
-//        this.rosterEntryService = rosterEntryService;
+        this.siteService = siteService;
     }
 
     public Game parse(String content) {
@@ -102,11 +96,12 @@ public class EventFileParser {
     private boolean isValidRecord(String line) {
         String[] parts = line.split(",", -1);
         return switch (parts[0]) {
-            case "id" -> parts.length == 2 && parts[1].substring(3).matches("\\d+"); // e.g., id,ATL198304080
+            case "id" ->
+                    parts.length == 2 && parts[1].length() > 4 && parts[1].substring(3).matches("\\d+"); // e.g., id,ATL198304080
             case "info" -> parts.length >= 3; // e.g., info,visteam,SDN
             case "play" -> parts.length >= 7; // e.g., play,5,1,playerId,00,,S8.3-H;1-2
             case "start", "sub" -> parts.length >= 6; // e.g., start,playerId,"Name",0,1,7
-            case "badj", "radj", "padj", "com", "data" -> true; // Flexible record types
+            case "badj", "radj", "padj", "com", "data", "version" -> true; // Flexible record types
             default -> {
                 logger.warn("Unknown record type: {}", parts[0]);
                 yield false;
@@ -123,22 +118,30 @@ public class EventFileParser {
                 game.setHomeTeam(teamService.findOrCreateTeam(parts[2], "", ""));
                 break;
             case "site":
-                game.setSite(parts[2]);
+                game.setSite(siteService.findById(parts[2]));
                 break;
             case "date":
-                game.setDate(parts[2]);
+                String[] elements = parts[2].split("/");
+                gameDate = parts[2];
+                // game.setDate(new GregorianCalendar(year, month, day).getTime());
                 break;
             case "number":
-                game.setNumber(parts[2]);
+                Integer gameNumber = Integer.parseInt(parts[2]);
+                if (!gameNumber.equals(0)) {
+                    game.setId(game.getId() + "-" + gameNumber);
+                }
+                game.setGameNumber(Integer.parseInt(parts[2]));
                 break;
             case "starttime":
-                game.setStarttime(parts[2]);
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd h:mma");
+                TemporalAccessor dateOfGame = formatter.parse(gameDate + " " + parts[2]);
+                game.setStartTime(parts[2]);
                 break;
             case "daynight":
-                game.setDaynight(parts[2]);
+                game.setNightGame(parts[2].equals("night"));
                 break;
             case "usedh":
-                game.setUsedh(Boolean.parseBoolean(parts[2]));
+                game.setUseDesignatedHitter(Boolean.parseBoolean(parts[2]));
                 break;
             case "umphome":
                 game.setUmphome(parts[2]);
@@ -152,47 +155,47 @@ public class EventFileParser {
             case "ump3b":
                 game.setUmp3b(parts[2]);
                 break;
-            case "howscored":
-                game.setHowscored(parts[2]);
-                break;
             case "pitches":
                 game.setPitches(parts[2]);
+                if (!parts[2].equals("pitches")) {
+                    logger.warn("Pitch-by-pitch not recorded");
+                }
                 break;
             case "oscorer":
-                game.setOscorer(parts[2]);
+                game.setOfficialScorer(parts[2]);
                 break;
             case "temp":
-                game.setTemp(Integer.parseInt(parts[2]));
+                game.setTemperature(Integer.parseInt(parts[2]));
                 break;
             case "winddir":
-                game.setWinddir(parts[2]);
+                game.setWindDirection(WindDirection.fromString(parts[2]));
                 break;
             case "windspeed":
-                game.setWindspeed(Integer.parseInt(parts[2]));
+                game.setWindSpeed(Integer.parseInt(parts[2]));
                 break;
             case "fieldcond":
-                game.setFieldcond(parts[2]);
+                game.setFieldConditions(FieldConditions.fromDescription(parts[2]));
                 break;
             case "precip":
-                game.setPrecip(parts[2]);
+                game.setPrecipitation(PrecipitationType.fromString(parts[2]));
                 break;
             case "sky":
-                game.setSky(parts[2]);
+                game.setSky(SkyType.fromString(parts[2]));
                 break;
             case "timeofgame":
-                game.setTimeofgame(Integer.parseInt(parts[2]));
+                game.setLengthOfGame(Integer.parseInt(parts[2]));
                 break;
             case "attendance":
                 game.setAttendance(Integer.parseInt(parts[2]));
                 break;
             case "wp":
-                game.setWp(parts[2]);
+                game.setWp(playerService.findById(parts[2]));
                 break;
             case "lp":
-                game.setLp(parts[2]);
+                game.setLp(playerService.findById(parts[2]));
                 break;
             case "save":
-                game.setSave(parts[2]);
+                game.setSave(playerService.findById(parts[2]));
                 break;
             default:
                 // Handle other info types if necessary
@@ -266,8 +269,10 @@ public class EventFileParser {
     private List<PitchType> parsePitchDetails(String pitches) {
         List<PitchType> details = new ArrayList<>();
         for (Character c : pitches.toCharArray()) {
-            PitchType pitchCount = PitchType.fromAbbreviation(c);
-            if (pitchCount != null) {
+            PitchType pitchCount = PitchType.fromAbbreviation(c.toString());
+            if (c.equals('+')) {
+                details.set(details.size() - 1, PitchType.fromAbbreviation(details.get(details.size() - 1).getAbbreviation() + "+"));
+            } else if (pitchCount != null) {
                 details.add(pitchCount);
             } else {
                 throw new IllegalArgumentException("Invalid pitch type: " + c);

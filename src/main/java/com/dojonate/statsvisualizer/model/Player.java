@@ -1,6 +1,7 @@
 package com.dojonate.statsvisualizer.model;
 
 import jakarta.persistence.*;
+
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
@@ -8,6 +9,7 @@ import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "player")
+@Access(AccessType.FIELD)
 public class Player {
 
     @Id
@@ -102,6 +104,7 @@ public class Player {
         this.rosterEntries = rosterEntries;
     }
 
+    @Transient
     public String getAllTeamNames() {
         return rosterEntries.stream()
                 .map(entry -> entry.getTeam().getName()) // Map each roster entry to the team's name
@@ -109,5 +112,4 @@ public class Player {
                 .sorted() // Sort alphabetically for consistency
                 .collect(Collectors.joining("; ")); // Concatenate with semicolons
     }
-
 }

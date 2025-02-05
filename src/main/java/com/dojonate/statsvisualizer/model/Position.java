@@ -35,4 +35,22 @@ public enum Position {
     public String getAbbreviation() {
         return abbreviation;
     }
+
+    public static Position fromPositionNumber(int positionNumber) {
+        for (Position position : Position.values()) {
+            if (position.getPositionNumber() == positionNumber) {
+                return position;
+            }
+        }
+        return null;
+    }
+
+    public static Position fromAbbreviation(String abbreviation) {
+        for (Position position : Position.values()) {
+            if (position.getAbbreviation().equals(abbreviation)) {
+                return position;
+            }
+        }
+        return null;
+    }
 }

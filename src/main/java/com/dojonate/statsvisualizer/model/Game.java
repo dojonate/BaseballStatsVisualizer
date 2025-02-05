@@ -1,7 +1,11 @@
 package com.dojonate.statsvisualizer.model;
 
 import jakarta.persistence.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
+import java.util.Calendar;
 import java.util.List;
 
 @Entity
@@ -9,41 +13,60 @@ public class Game {
     @Id
     private String id;
 
-    @ManyToOne
+    @OneToOne
     @JoinColumn(name = "home_team_id")
     private Team homeTeam;
 
-    @ManyToOne
+    @OneToOne
     @JoinColumn(name = "away_team_id")
     private Team awayTeam;
 
-    private String site;
-    private String date;
-    private String number;
-    private String starttime;
-    private String daynight;
-    private boolean usedh;
+    @OneToOne
+    @JoinColumn(name = "site_id")
+    private Site site;
+
+    @DateTimeFormat(pattern = "yyyy/MM/dd HH:mma")
+    private final Calendar date;
+
+    private Integer gameNumber;
+    private String startTime;
+    private boolean nightGame;
+    private boolean useDesignatedHitter;
     private String umphome;
     private String ump1b;
     private String ump2b;
     private String ump3b;
-    private String howscored;
     private String pitches;
-    private String oscorer;
-    private int temp;
-    private String winddir;
-    private int windspeed;
-    private String fieldcond;
-    private String precip;
-    private String sky;
-    private int timeofgame;
+    private String officialScorer;
+    private int temperature;
+    private WindDirection windDirection;
+    private int windSpeed;
+    private FieldConditions fieldConditions;
+    private PrecipitationType precipitation;
+    private SkyType sky;
+    private int lengthOfGame;
     private int attendance;
-    private String wp;
-    private String lp;
-    private String save;
+
+    @ManyToOne
+    @JoinColumn(name = "winning_pitcher_id", referencedColumnName = "player_id")
+    private Player wp;
+
+    @ManyToOne
+    @JoinColumn(name = "losing_pitcher_id", referencedColumnName = "player_id")
+    private Player lp;
+
+    @ManyToOne
+    @JoinColumn(name = "save_pitcher_id", referencedColumnName = "player_id")
+    private Player save;
+
+    private GameType gameType;
 
     @OneToMany(mappedBy = "game")
     private List<PlayerEvent> playerEvents;
+
+    public Game() {
+        this.date = Calendar.getInstance();
+    }
 
     // Getters and setters
     public String getId() {
@@ -70,52 +93,52 @@ public class Game {
         this.awayTeam = awayTeam;
     }
 
-    public String getSite() {
+    public Site getSite() {
         return site;
     }
 
-    public void setSite(String site) {
+    public void setSite(Site site) {
         this.site = site;
     }
 
-    public String getDate() {
+    public Calendar getDate() {
         return date;
     }
 
-    public void setDate(String date) {
-        this.date = date;
+    public void setDate(TemporalAccessor date) {
+        this.date.set(date.get(ChronoField.YEAR), date.get(ChronoField.MONTH_OF_YEAR), date.get(ChronoField.DAY_OF_MONTH), date.get(ChronoField.HOUR_OF_DAY), date.get(ChronoField.MINUTE_OF_HOUR));
     }
 
-    public String getNumber() {
-        return number;
+    public Integer getGameNumber() {
+        return gameNumber;
     }
 
-    public void setNumber(String number) {
-        this.number = number;
+    public void setGameNumber(Integer gameNumber) {
+        this.gameNumber = gameNumber;
     }
 
-    public String getStarttime() {
-        return starttime;
+    public String getStartTime() {
+        return startTime;
     }
 
-    public void setStarttime(String starttime) {
-        this.starttime = starttime;
+    public void setStartTime(String startTime) {
+        this.startTime = startTime;
     }
 
-    public String getDaynight() {
-        return daynight;
+    public boolean getNightGame() {
+        return nightGame;
     }
 
-    public void setDaynight(String daynight) {
-        this.daynight = daynight;
+    public void setNightGame(boolean nightGame) {
+        this.nightGame = nightGame;
     }
 
-    public boolean isUsedh() {
-        return usedh;
+    public boolean isUseDesignatedHitter() {
+        return useDesignatedHitter;
     }
 
-    public void setUsedh(boolean usedh) {
-        this.usedh = usedh;
+    public void setUseDesignatedHitter(boolean useDesignatedHitter) {
+        this.useDesignatedHitter = useDesignatedHitter;
     }
 
     public String getUmphome() {
@@ -150,14 +173,6 @@ public class Game {
         this.ump3b = ump3b;
     }
 
-    public String getHowscored() {
-        return howscored;
-    }
-
-    public void setHowscored(String howscored) {
-        this.howscored = howscored;
-    }
-
     public String getPitches() {
         return pitches;
     }
@@ -166,68 +181,68 @@ public class Game {
         this.pitches = pitches;
     }
 
-    public String getOscorer() {
-        return oscorer;
+    public String getOfficialScorer() {
+        return officialScorer;
     }
 
-    public void setOscorer(String oscorer) {
-        this.oscorer = oscorer;
+    public void setOfficialScorer(String officialScorer) {
+        this.officialScorer = officialScorer;
     }
 
-    public int getTemp() {
-        return temp;
+    public int getTemperature() {
+        return temperature;
     }
 
-    public void setTemp(int temp) {
-        this.temp = temp;
+    public void setTemperature(int temperature) {
+        this.temperature = temperature;
     }
 
-    public String getWinddir() {
-        return winddir;
+    public WindDirection getWindDirection() {
+        return windDirection;
     }
 
-    public void setWinddir(String winddir) {
-        this.winddir = winddir;
+    public void setWindDirection(WindDirection windDirection) {
+        this.windDirection = windDirection;
     }
 
-    public int getWindspeed() {
-        return windspeed;
+    public int getWindSpeed() {
+        return windSpeed;
     }
 
-    public void setWindspeed(int windspeed) {
-        this.windspeed = windspeed;
+    public void setWindSpeed(int windSpeed) {
+        this.windSpeed = windSpeed;
     }
 
-    public String getFieldcond() {
-        return fieldcond;
+    public FieldConditions getFieldConditions() {
+        return fieldConditions;
     }
 
-    public void setFieldcond(String fieldcond) {
-        this.fieldcond = fieldcond;
+    public void setFieldConditions(FieldConditions fieldConditions) {
+        this.fieldConditions = fieldConditions;
     }
 
-    public String getPrecip() {
-        return precip;
+    public PrecipitationType getPrecipitation() {
+        return precipitation;
     }
 
-    public void setPrecip(String precip) {
-        this.precip = precip;
+    public void setPrecipitation(PrecipitationType precipitation) {
+        this.precipitation = precipitation;
     }
 
-    public String getSky() {
+    public SkyType getSky() {
         return sky;
     }
 
-    public void setSky(String sky) {
+    public void setSky(SkyType sky) {
         this.sky = sky;
     }
 
-    public int getTimeofgame() {
-        return timeofgame;
+    public int getLengthOfGame() {
+        return lengthOfGame;
     }
 
-    public void setTimeofgame(int timeofgame) {
-        this.timeofgame = timeofgame;
+    public void setLengthOfGame(int lengthOfGame) {
+        this.lengthOfGame = lengthOfGame;
     }
 
     public int getAttendance() {
@@ -238,27 +253,27 @@ public class Game {
         this.attendance = attendance;
     }
 
-    public String getWp() {
+    public Player getWp() {
         return wp;
     }
 
-    public void setWp(String wp) {
+    public void setWp(Player wp) {
         this.wp = wp;
     }
 
-    public String getLp() {
+    public Player getLp() {
         return lp;
     }
 
-    public void setLp(String lp) {
+    public void setLp(Player lp) {
         this.lp = lp;
     }
 
-    public String getSave() {
+    public Player getSave() {
         return save;
     }
 
-    public void setSave(String save) {
+    public void setSave(Player save) {
         this.save = save;
     }
 
@@ -268,5 +283,13 @@ public class Game {
 
     public void setPlayerEvents(List<PlayerEvent> playerEvents) {
         this.playerEvents = playerEvents;
+    }
+
+    public GameType getGameType() {
+        return gameType;
+    }
+
+    public void setGameType(GameType gameType) {
+        this.gameType = gameType;
     }
 }
