@@ -85,18 +85,37 @@ file.upload.temp-dir=/tmp
 
 3. **Run the Application**
    ```bash
-   ./mvnw spring-boot:run
+   ./gradlew bootRun
    ```
 
 4. **Access the Application**
    - Open your browser and navigate to `http://localhost:8080`.
 
+5. **Run Tests**
+   ```bash
+   ./gradlew test
+   ```
+
 ## Roadmap
 
-- Add support for actual stats imported from Retrosheet.
-- Implement data visualization features.
-- Add core statistics calculations (e.g. OBP, SLG, AVG, and a few custom ones like "Hitting Average", which is OBP minus walks.)
-- Implement advanced filtering and analytics tools.
+### Short-Term
+
+- Add support for importing full play-by-play data from Retrosheet event files.
+- Enhance data visualization with interactive charts and tables.
+- Include core statistics calculations (e.g. OBP, SLG, AVG) and custom ones like “Hitting Average” (OBP minus walks).
+
+### Mid-Term
+
+- Expose a REST API for programmatic access to teams, players, and stats.
+- Introduce role-based authentication and user accounts.
+- Expand filtering and analytics tools for more advanced queries.
+- Publish data-stream or API hooks to support external analytic modules.
+
+### Long-Term
+
+- Provide real-time game updates and live stat tracking.
+- Deploy containerized environments and a public demo.
+- Establish extension hooks so external modules can provide advanced projections and analysis.
 
 ## License
 
