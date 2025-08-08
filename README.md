@@ -93,7 +93,7 @@ file.upload.temp-dir=/tmp
 
 ## Roadmap
 
-- Add support for actual stats imported from Retrosheets.
+- Add support for actual stats imported from Retrosheet.
 - Implement data visualization features.
 - Add core statistics calculations (e.g. OBP, SLG, AVG, and a few custom ones like "Hitting Average", which is OBP minus walks.)
 - Implement advanced filtering and analytics tools.
