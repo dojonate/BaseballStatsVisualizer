@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/styles-scripts :: styles('Games List')}"></head>
+<body class="grey darken-4">
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main class="container">
+    <h1 class="center-align white-text">Games</h1>
+
+    <!-- Filter Form -->
+    <form class="row" method="get" th:action="@{/games}">
+        <div class="input-field col s12 m6">
+            <input class="white-text" id="team" name="team" th:value="${team}" type="text">
+            <label class="white-text" for="team">Team Name</label>
+        </div>
+        <div class="input-field col s12 m6">
+            <input class="white-text" id="year" name="year" th:value="${year}" type="text">
+            <label class="white-text" for="year">Year</label>
+        </div>
+        <div class="input-field col s12">
+            <button class="btn waves-effect waves-light" type="submit">Filter</button>
+        </div>
+    </form>
+
+    <!-- Display error if filters are missing -->
+    <div th:if="${error}" class="red-text center-align">
+        <p th:text="${error}"></p>
+    </div>
+
+    <!-- Games Table -->
+    <div class="card grey darken-3" th:if="${!games.isEmpty()}">
+        <div class="card-content">
+            <table class="highlight responsive-table">
+                <thead>
+                <tr>
+                    <th class="white-text">Game ID</th>
+                    <th class="white-text">Date</th>
+                    <th class="white-text">Home Team</th>
+                    <th class="white-text">Away Team</th>
+                    <th class="white-text">Start Time</th>
+                    <th class="white-text">Details</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="game : ${games}">
+                    <td class="white-text" th:text="${game.id}"></td>
+                    <td class="white-text" th:text="${#calendars.format(game.date, 'yyyy-MM-dd')}"></td>
+                    <td class="white-text" th:text="${game.homeTeam != null ? game.homeTeam.name : 'N/A'}"></td>
+                    <td class="white-text" th:text="${game.awayTeam != null ? game.awayTeam.name : 'N/A'}"></td>
+                    <td class="white-text" th:text="${game.startTime}"></td>
+                    <td>
+                        <a class="btn waves-effect waves-light" th:href="@{'/game/' + ${game.id}}">View</a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>

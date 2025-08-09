@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/styles-scripts :: styles('Game Details')}"></head>
+<body class="grey darken-4">
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main class="container">
+    <h1 class="center-align white-text">Game Details</h1>
+    <div class="card grey darken-3">
+        <div class="card-content">
+            <h5 class="white-text">Game ID: <span th:text="${game.id}"></span></h5>
+            <p class="white-text">Date: <span th:text="${#calendars.format(game.date, 'yyyy-MM-dd')}"></span></p>
+            <p class="white-text">Start Time: <span th:text="${game.startTime}"></span></p>
+            <p class="white-text">Home Team: <span
+                    th:text="${game.homeTeam != null ? game.homeTeam.name : 'N/A'}"></span></p>
+            <p class="white-text">Away Team: <span
+                    th:text="${game.awayTeam != null ? game.awayTeam.name : 'N/A'}"></span></p>
+            <p class="white-text">Attendance: <span th:text="${game.attendance}"></span></p>
+            <p class="white-text">Game Type: <span th:text="${game.gameType}"></span></p>
+            <!-- Add more game details as desired -->
+        </div>
+    </div>
+
+    <!-- List of Player Events -->
+    <div class="card grey darken-3">
+        <div class="card-content">
+            <h5 class="white-text">Player Events</h5>
+            <table class="highlight responsive-table">
+                <thead>
+                <tr>
+                    <th class="white-text">Inning</th>
+                    <th class="white-text">Batter</th>
+                    <th class="white-text">Event Description</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="event : ${game.playerEvents}">
+                    <td class="white-text" th:text="${event.inning}"></td>
+                    <td class="white-text"
+                        th:text="${event.batter != null ? event.batter.firstName + ' ' + event.batter.lastName : 'N/A'}"></td>
+                    <td class="white-text" th:text="${event.description}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <a class="btn waves-effect waves-light" th:href="@{/games}">Back to Games List</a>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>

@@ -25,6 +25,7 @@ public class Game {
     @JoinColumn(name = "site_id")
     private Site site;
 
+    @Temporal(TemporalType.TIMESTAMP)
     @DateTimeFormat(pattern = "yyyy/MM/dd HH:mma")
     private final Calendar date;
 
@@ -36,14 +37,26 @@ public class Game {
     private String ump1b;
     private String ump2b;
     private String ump3b;
+    private String umpLF;
+    private String umpRF;
     private String pitches;
     private String officialScorer;
     private int temperature;
+
+    @Enumerated(EnumType.STRING)
     private WindDirection windDirection;
+
     private int windSpeed;
+
+    @Enumerated(EnumType.STRING)
     private FieldConditions fieldConditions;
+
+    @Enumerated(EnumType.STRING)
     private PrecipitationType precipitation;
+
+    @Enumerated(EnumType.STRING)
     private SkyType sky;
+
     private int lengthOfGame;
     private int attendance;
 
@@ -171,6 +184,22 @@ public class Game {
 
     public void setUmp3b(String ump3b) {
         this.ump3b = ump3b;
+    }
+
+    public String getUmpLF() {
+        return umpLF;
+    }
+
+    public void setUmpLF(String umpLF) {
+        this.umpLF = umpLF;
+    }
+
+    public String getUmpRF() {
+        return umpRF;
+    }
+
+    public void setUmpRF(String umpRF) {
+        this.umpRF = umpRF;
     }
 
     public String getPitches() {

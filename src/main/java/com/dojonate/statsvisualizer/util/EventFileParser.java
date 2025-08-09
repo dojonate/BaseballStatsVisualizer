@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAccessor;
 import java.util.*;
@@ -16,12 +15,11 @@ import java.util.*;
 public class EventFileParser {
 
     private static final Logger logger = LoggerFactory.getLogger(EventFileParser.class);
+
     @Autowired
     private final PlayerService playerService;
-
     @Autowired
     private final TeamService teamService;
-
     private final SiteService siteService;
     String gameDate;
 
@@ -31,48 +29,81 @@ public class EventFileParser {
         this.siteService = siteService;
     }
 
-    public Game parse(String content) {
+    /**
+     * Parse a file that may contain multiple games.
+     * Each game is assumed to start with an "id" record.
+     * Returns a list of Game objects.
+     */
+    public List<Game> parseMultiple(String content) {
         if (!isValidEventFile(content)) {
             throw new IllegalArgumentException("Invalid event file.");
         }
 
+        List<Game> games = new ArrayList<>();
         String[] lines = content.split("\n");
-        Game game = new Game();
-        List<PlayerEvent> playerEvents = new ArrayList<>();
+
+        // Variables to hold state for the current game being processed
+        Game currentGame = null;
+        List<PlayerEvent> currentPlayerEvents = new ArrayList<>();
         Map<String, Player> players = new HashMap<>();
         Map<String, Team> teams = new HashMap<>();
+        GameState state = new GameState();
+        gameDate = null;
 
         for (String line : lines) {
             String[] parts = line.split(",", -1);
             switch (parts[0]) {
                 case "id":
-                    game.setId(parts[1]);
+                    // When a new game starts, finalize the previous one (if any)
+                    if (currentGame != null) {
+                        currentGame.setPlayerEvents(currentPlayerEvents);
+                        games.add(currentGame);
+                    }
+                    // Reset state for new game
+                    currentGame = new Game();
+                    currentPlayerEvents = new ArrayList<>();
+                    players = new HashMap<>();
+                    teams = new HashMap<>();
+                    state = new GameState();
+                    currentGame.setId(parts[1]);
                     break;
                 case "info":
-                    handleInfo(game, parts);
+                    handleInfo(currentGame, parts);
+                    if ("date".equals(parts[1])) {
+                        gameDate = parts[2];
+                    }
                     break;
                 case "start":
                 case "sub":
                     handlePlayer(parts, players, teams);
                     break;
                 case "play":
-                    PlayerEvent playerEvent = handlePlay(parts, players, game);
-                    playerEvents.add(playerEvent);
+                    try {
+                        PlayerEvent playerEvent = handlePlay(parts, players, currentGame, state);
+                        currentPlayerEvents.add(playerEvent);
+                    } catch (Exception e) {
+                        logger.error("Failed to parse play record: {}", Arrays.toString(parts), e);
+                        throw e;
+                    }
                     break;
                 case "com":
-                    // Handle comments if necessary
+                    // Optionally handle comments here
                     break;
                 case "data":
-                    // Handle additional data if necessary
+                    // Optionally handle additional data here
                     break;
                 default:
-                    // Handle other types if necessary
+                    // Log unknown record types
+                    logger.warn("Unknown record type: {}", parts[0]);
                     break;
             }
         }
-
-        game.setPlayerEvents(playerEvents);
-        return game;
+        // Add the last game if present
+        if (currentGame != null) {
+            currentGame.setPlayerEvents(currentPlayerEvents);
+            games.add(currentGame);
+        }
+        return games;
     }
 
     private boolean isValidEventFile(String content) {
@@ -81,8 +112,7 @@ public class EventFileParser {
             logger.warn("Event file validation failed: Missing essential records.");
             return false;
         }
-
-        // Additional validation (e.g., correct format)
+        // Additional validation
         String[] lines = content.split("\n");
         for (String line : lines) {
             if (!isValidRecord(line)) {
@@ -96,12 +126,11 @@ public class EventFileParser {
     private boolean isValidRecord(String line) {
         String[] parts = line.split(",", -1);
         return switch (parts[0]) {
-            case "id" ->
-                    parts.length == 2 && parts[1].length() > 4 && parts[1].substring(3).matches("\\d+"); // e.g., id,ATL198304080
-            case "info" -> parts.length >= 3; // e.g., info,visteam,SDN
-            case "play" -> parts.length >= 7; // e.g., play,5,1,playerId,00,,S8.3-H;1-2
-            case "start", "sub" -> parts.length >= 6; // e.g., start,playerId,"Name",0,1,7
-            case "badj", "radj", "padj", "com", "data", "version" -> true; // Flexible record types
+            case "id" -> parts.length == 2 && parts[1].length() > 4 && parts[1].substring(3).matches("\\d+");
+            case "info" -> parts.length >= 3;
+            case "play" -> parts.length >= 7;
+            case "start", "sub" -> parts.length >= 6;
+            case "badj", "radj", "padj", "com", "data", "version" -> true;
             default -> {
                 logger.warn("Unknown record type: {}", parts[0]);
                 yield false;
@@ -121,16 +150,14 @@ public class EventFileParser {
                 game.setSite(siteService.findById(parts[2]));
                 break;
             case "date":
-                String[] elements = parts[2].split("/");
                 gameDate = parts[2];
-                // game.setDate(new GregorianCalendar(year, month, day).getTime());
                 break;
             case "number":
                 Integer gameNumber = Integer.parseInt(parts[2]);
                 if (!gameNumber.equals(0)) {
                     game.setId(game.getId() + "-" + gameNumber);
                 }
-                game.setGameNumber(Integer.parseInt(parts[2]));
+                game.setGameNumber(gameNumber);
                 break;
             case "starttime":
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd h:mma");
@@ -138,7 +165,7 @@ public class EventFileParser {
                 game.setStartTime(parts[2]);
                 break;
             case "daynight":
-                game.setNightGame(parts[2].equals("night"));
+                game.setNightGame("night".equals(parts[2]));
                 break;
             case "usedh":
                 game.setUseDesignatedHitter(Boolean.parseBoolean(parts[2]));
@@ -157,7 +184,7 @@ public class EventFileParser {
                 break;
             case "pitches":
                 game.setPitches(parts[2]);
-                if (!parts[2].equals("pitches")) {
+                if (!"pitches".equals(parts[2])) {
                     logger.warn("Pitch-by-pitch not recorded");
                 }
                 break;
@@ -216,15 +243,15 @@ public class EventFileParser {
             String lastName = nameParts[1];
             Player newPlayer = playerService.findById(playerId);
             if (newPlayer == null) {
-                newPlayer = playerService.save(new Player(playerId, firstName, lastName, "", "", LocalDate.of(1900, 1, 1)));
+                newPlayer = playerService.save(new Player(playerId, firstName, lastName, "", "", java.time.LocalDate.of(1900, 1, 1)));
             }
             return newPlayer;
         });
 
-        Team team = teams.computeIfAbsent(teamId, id -> teamService.findOrCreateTeam(id, "", ""));
+        teams.computeIfAbsent(teamId, id -> teamService.findOrCreateTeam(id, "", ""));
     }
 
-    private PlayerEvent handlePlay(String[] parts, Map<String, Player> players, Game game) {
+    private PlayerEvent handlePlay(String[] parts, Map<String, Player> players, Game game, GameState state) {
         try {
             int inning = Integer.parseInt(parts[1]);
             Team battingTeam = "0".equals(parts[2]) ? game.getAwayTeam() : game.getHomeTeam();
@@ -235,16 +262,17 @@ public class EventFileParser {
             String event = parts[6];
 
             Player player = players.get(playerId);
-
-            int balls = Character.getNumericValue(countCumulative.charAt(0)),
-                    strikes = Character.getNumericValue(countCumulative.charAt(1));
+            int balls = Character.getNumericValue(countCumulative.charAt(0));
+            int strikes = Character.getNumericValue(countCumulative.charAt(1));
 
 
             // Parse the count field for pitch and events
             List<PitchType> pitchDetails = parsePitchDetails(pitches);
+            state.setBatter(player);
 
             // Parse the event field for details
-            EventDetails eventDetails = parseEventDetails(event);
+            EventDetails eventDetails = new EventDetails(event, state);
+
 
             // Create the PlayerEvent object
             PlayerEvent playerEvent = new PlayerEvent();
@@ -255,14 +283,14 @@ public class EventFileParser {
             playerEvent.setInning(inning);
             playerEvent.setCount(balls, strikes);
             playerEvent.setPitchList(pitchDetails);
-            playerEvent.setEventType(eventDetails.getEventType());
+            playerEvent.setEventType(eventDetails.getEventTypes());
             playerEvent.setDescription(eventDetails.getDescription());
             playerEvent.setRunnerAdvances(eventDetails.getRunnerAdvances());
 
             return playerEvent;
         } catch (Exception e) {
             logger.error("Failed to parse play record: {}", Arrays.toString(parts), e);
-            throw e; // Rethrow for tests
+            throw e;
         }
     }
 
@@ -281,23 +309,12 @@ public class EventFileParser {
         return details;
     }
 
-    private EventDetails parseEventDetails(String event) {
-        return new EventDetails(event);
-    }
-
-    private String buildDescription(EventDetails details) {
-        StringBuilder description = new StringBuilder();
-        description.append("Event: ").append(details.getEventType());
-        if (!details.getRunnerAdvances().isEmpty()) {
-            description.append(", Runner Advances: ");
-            for (RunnerAdvance advance : details.getRunnerAdvances()) {
-                description.append(advance.getBaseMovement());
-                if (advance.getDetails() != null) {
-                    description.append(" (").append(advance.getDetails()).append(")");
-                }
-                description.append("; ");
-            }
+    // The original parse(String content) method could delegate to parseMultiple() and return the first game if desired:
+    public Game parse(String content) {
+        List<Game> games = parseMultiple(content);
+        if (games.isEmpty()) {
+            throw new IllegalArgumentException("No valid games found in the event file.");
         }
-        return description.toString().trim();
+        return games.get(0); // or handle as appropriate
     }
 }

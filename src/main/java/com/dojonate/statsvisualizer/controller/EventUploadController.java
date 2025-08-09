@@ -17,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.List;
 
 @RestController
 @RequestMapping("/upload")
@@ -50,11 +51,13 @@ public class EventUploadController {
             }
 
             // Parse the content
-            Game game = eventFileParser.parse(content.toString());
+            List<Game> games = eventFileParser.parseMultiple(content.toString());
 
             // Save the game and related events
-            gameService.save(game);
-            playerEventService.saveAll(game.getPlayerEvents());
+            for (Game game : games) {
+                playerEventService.saveAll(game.getPlayerEvents());
+                gameService.save(game);
+            }
 
             return ResponseEntity.ok("File uploaded successfully.");
         } catch (IllegalArgumentException e) {

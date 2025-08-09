@@ -8,16 +8,22 @@ import java.util.List;
 @Entity
 public class PlayerEvent {
 
+    @ElementCollection
+    @Enumerated(EnumType.STRING)
     private final List<EventType> eventType;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     @ManyToOne
     @JoinColumn(name = "player_id")
     private Player batter;
+
     @ManyToOne
     @JoinColumn(name = "game_id")
     private Game game;
+    
     private int balls;
 
     private int strikes;
