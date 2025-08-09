@@ -1,0 +1,3538 @@
+==== START OF src/main/java/com/dojonate/statsvisualizer/config/SecurityConfig.java ====
+package com.dojonate.statsvisualizer.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for simplicity
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/upload/**").authenticated() // Restrict /maint/** to authenticated users
+                        .anyRequest().permitAll() // Allow all other endpoints
+                )
+                .httpBasic(Customizer.withDefaults()); // Enable basic authentication with default settings
+
+        return http.build();
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        // Configure an in-memory user for authentication
+        UserDetails admin = User
+                .withUsername("maintainer")
+                .password("{noop}password") // `{noop}` disables password encoding for simplicity
+                .roles("ADMIN")
+                .build();
+
+        return new InMemoryUserDetailsManager(admin);
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/config/SecurityConfig.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/controller/EventUploadController.java ====
+package com.dojonate.statsvisualizer.controller;
+
+import com.dojonate.statsvisualizer.model.Game;
+import com.dojonate.statsvisualizer.service.GameService;
+import com.dojonate.statsvisualizer.service.PlayerEventService;
+import com.dojonate.statsvisualizer.util.EventFileParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.List;
+
+@RestController
+@RequestMapping("/upload")
+public class EventUploadController {
+
+    private final Logger logger = LoggerFactory.getLogger(EventUploadController.class);
+    @Autowired
+    private final EventFileParser eventFileParser;
+    @Autowired
+    private final GameService gameService;
+    @Autowired
+    private final PlayerEventService playerEventService;
+
+    public EventUploadController(EventFileParser eventFileParser, GameService gameService, PlayerEventService playerEventService) {
+        this.eventFileParser = eventFileParser;
+        this.gameService = gameService;
+        this.playerEventService = playerEventService;
+    }
+
+    @PostMapping("/events")
+    public ResponseEntity<String> uploadEventFile(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body("File is empty.");
+        }
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
+            StringBuilder content = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                content.append(line).append("\n");
+            }
+
+            // Parse the content
+            List<Game> games = eventFileParser.parseMultiple(content.toString());
+
+            // Save the game and related events
+            for (Game game : games) {
+                playerEventService.saveAll(game.getPlayerEvents());
+                gameService.save(game);
+            }
+
+            return ResponseEntity.ok("File uploaded successfully.");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("Failed to upload event file: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error processing the file.");
+        }
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/controller/EventUploadController.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/controller/PlayersViewController.java ====
+package com.dojonate.statsvisualizer.controller;
+
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.service.PlayerService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+@Controller
+public class PlayersViewController {
+
+    @Autowired
+    private PlayerService playerService;
+
+    @GetMapping("/players")
+    public String listPlayers(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "lastName") String sortBy,
+            @RequestParam(defaultValue = "asc") String direction,
+            Model model) {
+
+        Page<Player> playerPage = playerService.getPlayers(search, page, size, sortBy, direction);
+        int totalPages = playerPage.getTotalPages();
+        int currentPage = playerPage.getNumber();
+        int start = Math.max(0, currentPage - 2);
+        int end = Math.min(totalPages, currentPage + 3);
+
+        List<Integer> pages = IntStream.range(start, end)
+                .boxed()
+                .collect(Collectors.toList());
+
+        model.addAttribute("players", playerPage.getContent());
+        model.addAttribute("currentPage", currentPage);
+        model.addAttribute("totalPages", totalPages);
+        model.addAttribute("pages", pages);
+        model.addAttribute("search", search);
+        model.addAttribute("sortBy", sortBy);
+        model.addAttribute("direction", direction);
+
+        return "players";
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/controller/PlayersViewController.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/controller/RostersViewController.java ====
+package com.dojonate.statsvisualizer.controller;
+
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.model.Team;
+import com.dojonate.statsvisualizer.service.RosterEntryService;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Map;
+
+@Controller
+public class RostersViewController {
+
+    private final RosterEntryService rosterEntryService;
+
+    public RostersViewController(RosterEntryService rosterEntryService) {
+        this.rosterEntryService = rosterEntryService;
+    }
+
+    @GetMapping("/rosters")
+    public String listRosters(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "player.lastName") String sortBy,
+            @RequestParam(defaultValue = "asc") String direction,
+            Model model
+    ) {
+        Page<Map.Entry<Player, Map<Team, Map.Entry<String, String>>>> consolidatedRosters = rosterEntryService.getConsolidatedRosters(search, page - 1, size, sortBy, direction);
+        model.addAttribute("consolidatedRosters", consolidatedRosters);
+        model.addAttribute("currentPage", page);
+        model.addAttribute("totalPages", consolidatedRosters.getTotalPages());
+        model.addAttribute("search", search);
+        model.addAttribute("sortBy", sortBy);
+        model.addAttribute("direction", direction);
+        return "rosters";
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/controller/RostersViewController.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/controller/RosterUploadController.java ====
+package com.dojonate.statsvisualizer.controller;
+
+import com.dojonate.statsvisualizer.model.RosterEntry;
+import com.dojonate.statsvisualizer.model.Team;
+import com.dojonate.statsvisualizer.service.RosterEntryService;
+import com.dojonate.statsvisualizer.service.TeamService;
+import com.dojonate.statsvisualizer.util.RosFileParser;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+
+@Controller
+@RequestMapping("/upload")
+public class RosterUploadController {
+
+    private static final int TEAM_ABBREVIATION_LENGTH = 3;
+
+    private final RosterEntryService rosterEntryService;
+    private final TeamService teamService;
+    private final RosFileParser rosFileParser;
+
+    @Value("${file.upload.temp-dir}")
+    private String tempDir;
+
+    public RosterUploadController(RosterEntryService rosterEntryService, TeamService teamService, RosFileParser rosFileParser) {
+        this.rosterEntryService = rosterEntryService;
+        this.teamService = teamService;
+        this.rosFileParser = rosFileParser;
+    }
+
+    @PostMapping("/rosters")
+    public ResponseEntity<String> uploadRosFile(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body("File is empty.");
+        }
+
+        try {
+            File uploadedFile = saveFileTemporarily(file);
+            String teamAbbreviation = extractTeamAbbreviation(uploadedFile.getName());
+            Team team = teamService.findOrCreateTeam(teamAbbreviation, "Unknown Team", "Unknown League");
+            processRosterFile(uploadedFile, team);
+            cleanupTemporaryFile(uploadedFile);
+            return ResponseEntity.ok("File uploaded and processed successfully.");
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to process file: " + e.getMessage());
+        }
+    }
+
+    private File saveFileTemporarily(MultipartFile file) throws IOException {
+        File tempDirectory = new File(tempDir);
+        if (!tempDirectory.exists() && !tempDirectory.mkdirs()) {
+            throw new IOException("Failed to create temporary directory: " + tempDirectory.getAbsolutePath());
+        }
+        File uploadedFile = new File(tempDirectory, file.getOriginalFilename());
+        file.transferTo(uploadedFile);
+        return uploadedFile;
+    }
+
+    private String extractTeamAbbreviation(String fileName) {
+        return fileName.substring(0, TEAM_ABBREVIATION_LENGTH);
+    }
+
+    private void processRosterFile(File uploadedFile, Team team) throws IOException {
+        List<RosterEntry> rosterEntries = rosFileParser.parseRosFile(uploadedFile.toPath(), team);
+        rosterEntryService.saveAll(rosterEntries);
+    }
+
+    private void cleanupTemporaryFile(File uploadedFile) {
+        if (!uploadedFile.delete()) {
+            System.err.println("Failed to delete temporary file: " + uploadedFile.getAbsolutePath());
+        }
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/controller/RosterUploadController.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/controller/SampleController.java ====
+package com.dojonate.statsvisualizer.controller;
+
+import com.dojonate.statsvisualizer.service.PlayerService;
+import com.dojonate.statsvisualizer.service.RosterEntryService;
+import com.dojonate.statsvisualizer.service.TeamService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller
+public class SampleController {
+
+    private final PlayerService playerService;
+
+    public SampleController(PlayerService playerService, RosterEntryService rosterEntryService, TeamService teamService) {
+        this.playerService = playerService;
+    }
+
+    @GetMapping("/test-db")
+    public String testDatabase() {
+        return "Player count: " + playerService.findAll().size();
+    }
+
+//    @GetMapping("/rosters")
+//    public String getAllRosters(Model model) {
+//        List<RosterEntry> rosters = rosterEntryService.findAll();
+//        model.addAttribute("rosters", rosters);
+//        return "rosters";
+//    }
+
+//    @GetMapping("/teams")
+//    public String getAllTeams(Model model) {
+//        List<Team> teams = teamService.findAll();
+//        model.addAttribute("teams", teams);
+//        return "teams";
+//    }
+
+    // Placeholder for player details page
+    @GetMapping("/player-details")
+    public String playerDetails(Model model) {
+        model.addAttribute("message", "This is a placeholder for the player details page.");
+        return "player-details";
+    }
+
+    // Placeholder for a team stats page
+    @GetMapping("/team-stats")
+    public String teamStats(Model model) {
+        model.addAttribute("message", "This is a placeholder for the team stats page.");
+        return "team-stats";
+    }
+
+    // Placeholder for a team details page
+    @GetMapping("/team-details")
+    public String teamDetails(Model model) {
+        model.addAttribute("message", "This is a placeholder for the team stats page.");
+        return "team-stats";
+    }
+
+    // Placeholder for a leaderboard page
+    @GetMapping("/leaderboard")
+    public String leaderboard(Model model) {
+        model.addAttribute("message", "This is a placeholder for the leaderboard page.");
+        return "leaderboard";
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/controller/SampleController.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/controller/TeamsViewController.java ====
+package com.dojonate.statsvisualizer.controller;
+
+import com.dojonate.statsvisualizer.model.Team;
+import com.dojonate.statsvisualizer.service.TeamService;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+@Controller
+public class TeamsViewController {
+
+    private final TeamService teamService;
+
+    public TeamsViewController(TeamService teamService) {
+        this.teamService = teamService;
+    }
+
+    @GetMapping("/teams")
+    public String listTeams(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "name") String sortBy,
+            @RequestParam(defaultValue = "asc") String direction,
+            Model model
+    ) {
+        Page<Team> teamsPage = teamService.getTeams(search, page - 1, size, sortBy, direction);
+        model.addAttribute("teams", teamsPage.getContent());
+        model.addAttribute("currentPage", teamsPage.getNumber() + 1);
+        model.addAttribute("totalPages", teamsPage.getTotalPages());
+        model.addAttribute("search", search);
+        return "teams";
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/controller/TeamsViewController.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/controller/TeamUploadController.java ====
+package com.dojonate.statsvisualizer.controller;
+
+import com.dojonate.statsvisualizer.model.Team;
+import com.dojonate.statsvisualizer.service.TeamService;
+import com.dojonate.statsvisualizer.util.CsvTeamParser;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+
+@Controller
+@RequestMapping("/upload")
+public class TeamUploadController {
+
+    private static final Logger logger = LoggerFactory.getLogger(TeamUploadController.class);
+
+    private final TeamService teamService;
+    private final CsvTeamParser csvTeamParser;
+
+    @Value("${file.upload.temp-dir}")
+    private String tempDir;
+
+    private static final String FILE_EMPTY_ERROR = "The uploaded file is empty.";
+    private static final String PROCESSING_ERROR = "Failed to process the file.";
+    private static final String SUCCESS_RESPONSE = "Teams uploaded successfully.";
+    private static final int INTERNAL_SERVER_ERROR_STATUS = 500;
+
+    public TeamUploadController(TeamService teamService, CsvTeamParser csvTeamParser) {
+        this.teamService = teamService;
+        this.csvTeamParser = csvTeamParser;
+    }
+
+    @PostMapping("/teams")
+    public ResponseEntity<String> handleCsvUpload(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            logger.warn("File upload failed: file is empty.");
+            return ResponseEntity.badRequest().body(FILE_EMPTY_ERROR);
+        }
+
+        File temporaryFile = null;
+
+        try {
+            temporaryFile = createTemporaryFile(file);
+            return handleFileProcessing(temporaryFile);
+        } catch (IOException e) {
+            logger.error("Error processing file upload: {}", e.getMessage(), e);
+            return ResponseEntity.status(INTERNAL_SERVER_ERROR_STATUS).body(PROCESSING_ERROR);
+        } finally {
+            cleanUpTemporaryFile(temporaryFile);
+        }
+    }
+
+    private ResponseEntity<String> handleFileProcessing(File file) throws IOException {
+        List<Team> teams = csvTeamParser.parseTeamCsv(file.toPath());
+        teamService.saveAll(teams);
+        logger.info("Successfully imported {} teams.", teams.size());
+        return ResponseEntity.ok("Successfully imported " + teams.size() + " teams.");
+    }
+
+    private File createTemporaryFile(MultipartFile file) throws IOException {
+        File tempFile = new File(tempDir, file.getOriginalFilename());
+        file.transferTo(tempFile);
+        logger.info("Temporary file created at {}", tempFile.getAbsolutePath());
+        return tempFile;
+    }
+
+    private void cleanUpTemporaryFile(File file) {
+        if (file != null) {
+            if (!tryDeleteFile(file)) {
+                logger.warn("Failed to delete temporary file: {}", file.getAbsolutePath());
+            } else {
+                logger.info("Temporary file deleted successfully: {}", file.getAbsolutePath());
+            }
+        }
+    }
+
+    private boolean tryDeleteFile(File file) {
+        return file.delete();
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/controller/TeamUploadController.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/EventType.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum EventType {
+    // Batter Events
+    SINGLE("S", "Single"),
+    DOUBLE("D", "Double"),
+    TRIPLE("T", "Triple"),
+    HOME_RUN("HR", "Home Run"),
+    WALK("W", "Walk"),
+    INTENTIONAL_WALK("IW", "Intentional Walk"),
+    HIT_BY_PITCH("HP", "Hit by Pitch"),
+    STRIKEOUT("K", "Strikeout"),
+    NO_PLAY("NP", "No Play"),
+    ERROR("E", "Error"),
+    ERROR_ON_FOUL_FLY_BALL("FLE", "Error on Foul Fly Ball"),
+    GROUND_RULE_DOUBLE("DGR", "Ground Rule Double"),
+    CATCHER_INTERFERENCE("C/E", "Catcher Interference"),
+    FIELDERS_CHOICE("FC", "Fielder's Choice"),
+    FORCE_OUT("FO", "Force Out"),
+    SACRIFICE_FLY("SF", "Sacrifice Fly"),
+    SACRIFICE_HIT_BUNT("SH", "Sacrifice Hit (Bunt)"),
+    BATTED_BALL_INTERFERENCE("BR", "Batted Ball Interference"),
+    INSIDE_THE_PARK_HOME_RUN("IPHR", "Inside-the-Park Home Run"),
+    LINED_INTO_DOUBLE_PLAY("LDP", "Lined Into Double Play"),
+    LINED_INTO_TRIPLE_PLAY("LTP", "Lined Into Triple Play"),
+    OBSTRUCTION("OBS", "Obstruction"),
+    BATTERS_INTERFERENCE("BINT", "Batter's Interference"),
+
+    // Runner Events
+    BALK("BK", "Balk"),
+    CAUGHT_STEALING("CS", "Caught Stealing"),
+    DEFENSIVE_INDIFFERENCE("DI", "Defensive Indifference"),
+    OUT_ADVANCING("OA", "Out Advancing"),
+    PASSED_BALL("PB", "Passed Ball"),
+    WILD_PITCH("WP", "Wild Pitch"),
+    PICK_OFF("PO", "Pick Off"),
+    PICK_OFF_CAUGHT_STEALING("POCS", "Pick Off Caught Stealing"),
+    STOLEN_BASE("SB", "Stolen Base"),
+
+    // Modifiers
+    APPEAL_PLAY("AP", "Appeal Play"),
+    BUNT_GROUND_BALL("BG", "Ground Ball Bunt"),
+    BUNT_GROUNDED_INTO_DOUBLE_PLAY("BGDP", "Bunt Grounded Into Double Play"),
+    BATTER_INTERFERENCE("BINT", "Batter Interference"),
+    BUNT_LINE_DRIVE("BL", "Line Drive Bunt"),
+    BATTING_OUT_OF_TURN("BOOT", "Batting Out of Turn"),
+    BUNT_POP_UP("BP", "Bunt Pop Up"),
+    BUNT_POPPED_INTO_DOUBLE_PLAY("BPDP", "Bunt Popped Into Double Play"),
+    RUNNER_HIT_BY_BATTED_BALL("BR", "Runner Hit by Batted Ball"),
+    CALLED_THIRD_STRIKE("C", "Called Third Strike"),
+    COURTESY_BATTER("COUB", "Courtesy Batter"),
+    COURTESY_FIELDER("COUF", "Courtesy Fielder"),
+    COURTESY_RUNNER("COUR", "Courtesy Runner"),
+    UNSPECIFIED_DOUBLE_PLAY("DP", "Unspecified Double Play"),
+    ERROR_ON_FIELDER("$E", "Error on Fielder"),
+    FLY("F", "Fly"),
+    FLY_BALL_DOUBLE_PLAY("FDP", "Fly Ball Double Play"),
+    FAN_INTERFERENCE("FINT", "Fan Interference"),
+    FOUL("FL", "Foul"),
+    GROUND_BALL("G", "Grounder"),
+    GROUND_BALL_DOUBLE_PLAY("GDP", "Ground Ball Double Play"),
+    GROUND_BALL_TRIPLE_PLAY("GTP", "Ground Ball Triple Play"),
+    INFIELD_FLY_RULE("IF", "Infield Fly Rule"),
+    INTERFERENCE("INT", "Interference"),
+    LINE_DRIVE("L", "Line Drive"),
+    MANAGER_CHALLENGE("MREV", "Manager Challenge"),
+    NO_DOUBLE_PLAY("NDP", "No Double Play"),
+    POP_FLY("P", "Pop Fly"),
+    RUNNER_PASSED("PASS", "Runner Passed"),
+    RELAY_THROW("R", "Relay Throw"),
+    RUNNER_INTERFERENCE("RINT", "Runner Interference"),
+    SACRIFICE_HIT("SH", "Sacrifice Hit"),
+    THROW("TH", "Throw"),
+    THROW_TO_BASE("TH", "Throw to Base"),
+    UNSPECIFIED_TRIPLE_PLAY("TP", "Unspecified Triple Play"),
+    UMPIRE_INTERFERENCE("UINT", "Umpire Interference"),
+    UMPIRE_REVIEW("UREV", "Umpire Review");
+
+    private final String abbreviation;
+    private final String description;
+
+    EventType(String abbreviation, String description) {
+        this.abbreviation = abbreviation;
+        this.description = description;
+    }
+
+    public static EventType fromAbbreviation(String abbreviation) {
+        for (EventType eventType : EventType.values()) {
+            if (eventType.getAbbreviation().equals(abbreviation)) {
+                return eventType;
+            }
+        }
+        return null;
+    }
+
+    public String getAbbreviation() {
+        return abbreviation;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/EventType.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/FieldConditions.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum FieldConditions {
+    DRY("dry"),
+    SOAKED("soaked"),
+    WET("wet"),
+    UNKNOWN("unknown");
+
+    private final String description;
+
+    FieldConditions(String description) {
+        this.description = description;
+    }
+
+    public static FieldConditions fromDescription(String description) {
+        for (FieldConditions condition : FieldConditions.values()) {
+            if (condition.description.equalsIgnoreCase(description)) {
+                return condition;
+            }
+        }
+        return UNKNOWN;
+    }
+
+    @Override
+    public String toString() {
+        return description;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/FieldConditions.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/Game.java ====
+package com.dojonate.statsvisualizer.model;
+
+import jakarta.persistence.*;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
+import java.util.Calendar;
+import java.util.List;
+
+@Entity
+public class Game {
+    @Id
+    private String id;
+
+    @OneToOne
+    @JoinColumn(name = "home_team_id")
+    private Team homeTeam;
+
+    @OneToOne
+    @JoinColumn(name = "away_team_id")
+    private Team awayTeam;
+
+    @OneToOne
+    @JoinColumn(name = "site_id")
+    private Site site;
+
+    @Temporal(TemporalType.TIMESTAMP)
+    @DateTimeFormat(pattern = "yyyy/MM/dd HH:mma")
+    private final Calendar date;
+
+    private Integer gameNumber;
+    private String startTime;
+    private boolean nightGame;
+    private boolean useDesignatedHitter;
+    private String umphome;
+    private String ump1b;
+    private String ump2b;
+    private String ump3b;
+    private String umpLF;
+    private String umpRF;
+    private String pitches;
+    private String officialScorer;
+    private int temperature;
+
+    @Enumerated(EnumType.STRING)
+    private WindDirection windDirection;
+
+    private int windSpeed;
+
+    @Enumerated(EnumType.STRING)
+    private FieldConditions fieldConditions;
+
+    @Enumerated(EnumType.STRING)
+    private PrecipitationType precipitation;
+
+    @Enumerated(EnumType.STRING)
+    private SkyType sky;
+
+    private int lengthOfGame;
+    private int attendance;
+
+    @ManyToOne
+    @JoinColumn(name = "winning_pitcher_id", referencedColumnName = "player_id")
+    private Player wp;
+
+    @ManyToOne
+    @JoinColumn(name = "losing_pitcher_id", referencedColumnName = "player_id")
+    private Player lp;
+
+    @ManyToOne
+    @JoinColumn(name = "save_pitcher_id", referencedColumnName = "player_id")
+    private Player save;
+
+    private GameType gameType;
+
+    @OneToMany(mappedBy = "game")
+    private List<PlayerEvent> playerEvents;
+
+    public Game() {
+        this.date = Calendar.getInstance();
+    }
+
+    // Getters and setters
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public Team getHomeTeam() {
+        return homeTeam;
+    }
+
+    public void setHomeTeam(Team homeTeam) {
+        this.homeTeam = homeTeam;
+    }
+
+    public Team getAwayTeam() {
+        return awayTeam;
+    }
+
+    public void setAwayTeam(Team awayTeam) {
+        this.awayTeam = awayTeam;
+    }
+
+    public Site getSite() {
+        return site;
+    }
+
+    public void setSite(Site site) {
+        this.site = site;
+    }
+
+    public Calendar getDate() {
+        return date;
+    }
+
+    public void setDate(TemporalAccessor date) {
+        this.date.set(date.get(ChronoField.YEAR), date.get(ChronoField.MONTH_OF_YEAR), date.get(ChronoField.DAY_OF_MONTH), date.get(ChronoField.HOUR_OF_DAY), date.get(ChronoField.MINUTE_OF_HOUR));
+    }
+
+    public Integer getGameNumber() {
+        return gameNumber;
+    }
+
+    public void setGameNumber(Integer gameNumber) {
+        this.gameNumber = gameNumber;
+    }
+
+    public String getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(String startTime) {
+        this.startTime = startTime;
+    }
+
+    public boolean getNightGame() {
+        return nightGame;
+    }
+
+    public void setNightGame(boolean nightGame) {
+        this.nightGame = nightGame;
+    }
+
+    public boolean isUseDesignatedHitter() {
+        return useDesignatedHitter;
+    }
+
+    public void setUseDesignatedHitter(boolean useDesignatedHitter) {
+        this.useDesignatedHitter = useDesignatedHitter;
+    }
+
+    public String getUmphome() {
+        return umphome;
+    }
+
+    public void setUmphome(String umphome) {
+        this.umphome = umphome;
+    }
+
+    public String getUmp1b() {
+        return ump1b;
+    }
+
+    public void setUmp1b(String ump1b) {
+        this.ump1b = ump1b;
+    }
+
+    public String getUmp2b() {
+        return ump2b;
+    }
+
+    public void setUmp2b(String ump2b) {
+        this.ump2b = ump2b;
+    }
+
+    public String getUmp3b() {
+        return ump3b;
+    }
+
+    public void setUmp3b(String ump3b) {
+        this.ump3b = ump3b;
+    }
+
+    public String getUmpLF() {
+        return umpLF;
+    }
+
+    public void setUmpLF(String umpLF) {
+        this.umpLF = umpLF;
+    }
+
+    public String getUmpRF() {
+        return umpRF;
+    }
+
+    public void setUmpRF(String umpRF) {
+        this.umpRF = umpRF;
+    }
+
+    public String getPitches() {
+        return pitches;
+    }
+
+    public void setPitches(String pitches) {
+        this.pitches = pitches;
+    }
+
+    public String getOfficialScorer() {
+        return officialScorer;
+    }
+
+    public void setOfficialScorer(String officialScorer) {
+        this.officialScorer = officialScorer;
+    }
+
+    public int getTemperature() {
+        return temperature;
+    }
+
+    public void setTemperature(int temperature) {
+        this.temperature = temperature;
+    }
+
+    public WindDirection getWindDirection() {
+        return windDirection;
+    }
+
+    public void setWindDirection(WindDirection windDirection) {
+        this.windDirection = windDirection;
+    }
+
+    public int getWindSpeed() {
+        return windSpeed;
+    }
+
+    public void setWindSpeed(int windSpeed) {
+        this.windSpeed = windSpeed;
+    }
+
+    public FieldConditions getFieldConditions() {
+        return fieldConditions;
+    }
+
+    public void setFieldConditions(FieldConditions fieldConditions) {
+        this.fieldConditions = fieldConditions;
+    }
+
+    public PrecipitationType getPrecipitation() {
+        return precipitation;
+    }
+
+    public void setPrecipitation(PrecipitationType precipitation) {
+        this.precipitation = precipitation;
+    }
+
+    public SkyType getSky() {
+        return sky;
+    }
+
+    public void setSky(SkyType sky) {
+        this.sky = sky;
+    }
+
+    public int getLengthOfGame() {
+        return lengthOfGame;
+    }
+
+    public void setLengthOfGame(int lengthOfGame) {
+        this.lengthOfGame = lengthOfGame;
+    }
+
+    public int getAttendance() {
+        return attendance;
+    }
+
+    public void setAttendance(int attendance) {
+        this.attendance = attendance;
+    }
+
+    public Player getWp() {
+        return wp;
+    }
+
+    public void setWp(Player wp) {
+        this.wp = wp;
+    }
+
+    public Player getLp() {
+        return lp;
+    }
+
+    public void setLp(Player lp) {
+        this.lp = lp;
+    }
+
+    public Player getSave() {
+        return save;
+    }
+
+    public void setSave(Player save) {
+        this.save = save;
+    }
+
+    public List<PlayerEvent> getPlayerEvents() {
+        return playerEvents;
+    }
+
+    public void setPlayerEvents(List<PlayerEvent> playerEvents) {
+        this.playerEvents = playerEvents;
+    }
+
+    public GameType getGameType() {
+        return gameType;
+    }
+
+    public void setGameType(GameType gameType) {
+        this.gameType = gameType;
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/Game.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/GameType.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum GameType {
+    REGULAR("regular"),
+    EXHIBITION("exhibition"),
+    PRESEASON("preseason"),
+    ALLSTAR("allstar"),
+    PLAYOFF("playoff"),
+    WORLDSERIES("worldseries"),
+    LCS("lcs"),
+    DIVISIONSERIES("divisionseries"),
+    WILDCARD("wildcard"),
+    CHAMPIONSHIP("championship");
+
+    private final String description;
+
+    GameType(String description) {
+        this.description = description;
+    }
+
+    @Override
+    public String toString() {
+        return description;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/GameType.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/PitchType.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum PitchType {
+    BLOCKED_PITCH("*"),
+    NON_BATTER_PLAY("."),
+    PICKOFF_TO_FIRST("1"),
+    PICKOFF_TO_SECOND("2"),
+    PICKOFF_TO_THIRD("3"),
+    CATCHER_PICKOFF_TO_FIRST("1+"),
+    CATCHER_PICKOFF_TO_SECOND("2+"),
+    CATCHER_PICKOFF_TO_THIRD("3+"),
+    RUNNER_GOING(">"),
+    AUTOMATIC_STRIKE("A"),
+    BALL("B"),
+    CALLED_STRIKE("C"),
+    FOUL("F"),
+    HIT_BATTER("H"),
+    INTENTIONAL_BALL("I"),
+    FOUL_BUNT("L"),
+    MISSED_BUNT_ATTEMPT("M"),
+    NO_PITCH("N"), // for balks and interference calls
+    FOUL_TIP_BUNT("O"),
+    PITCHOUT("P"),
+    SWINGING_ON_PITCHOUT("Q"),
+    FOUL_ON_PITCHOUT("R"),
+    SWINGING_STRIKE("S"),
+    FOUL_TIP("T"),
+    UNKNOWN("U"),
+    CALLED_BALL_ANOMALY("V"),
+    BALL_IN_PLAY_BATTER("X"),
+    BALL_IN_PLAY_PITCHOUT("Y");
+
+    private final String abbreviation;
+
+    PitchType(String abbreviation) {
+        this.abbreviation = abbreviation;
+    }
+
+    public static PitchType fromAbbreviation(String abbreviation) {
+        for (PitchType pitchType : PitchType.values()) {
+            if (pitchType.getAbbreviation().equals(abbreviation)) {
+                return pitchType;
+            }
+        }
+        return null;
+    }
+
+    public String getAbbreviation() {
+        return abbreviation;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/PitchType.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/Player.java ====
+package com.dojonate.statsvisualizer.model;
+
+import jakarta.persistence.*;
+
+import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Entity
+@Table(name = "player")
+@Access(AccessType.FIELD)
+public class Player {
+
+    @Id
+    @Column(name = "player_id", unique = true, nullable = false)
+    private String playerId;
+
+    @Column(name = "first_name", nullable = false)
+    private String firstName;
+
+    @Column(name = "last_name", nullable = false)
+    private String lastName;
+
+    @Column(name = "batting_hand")
+    private String battingHand;
+
+    @Column(name = "throwing_hand")
+    private String throwingHand;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
+    @OneToMany(mappedBy = "player", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<RosterEntry> rosterEntries = new HashSet<>();
+
+    public Player() {
+    }
+
+    public Player(String playerId, String firstName, String lastName, String battingHand, String throwingHand, LocalDate birthDate) {
+        this.playerId = playerId;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.battingHand = battingHand;
+        this.throwingHand = throwingHand;
+        this.birthDate = birthDate;
+    }
+
+    // Getters and Setters
+
+    public String getPlayerId() {
+        return playerId;
+    }
+
+    public void setPlayerId(String playerId) {
+        this.playerId = playerId;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public String getBattingHand() {
+        return battingHand;
+    }
+
+    public void setBattingHand(String battingHand) {
+        this.battingHand = battingHand;
+    }
+
+    public String getThrowingHand() {
+        return throwingHand;
+    }
+
+    public void setThrowingHand(String throwingHand) {
+        this.throwingHand = throwingHand;
+    }
+
+    public LocalDate getBirthDate() {
+        return birthDate;
+    }
+
+    public void setBirthDate(LocalDate birthDate) {
+        this.birthDate = birthDate;
+    }
+
+    public Set<RosterEntry> getRosterEntries() {
+        return rosterEntries;
+    }
+
+    public void setRosterEntries(Set<RosterEntry> rosterEntries) {
+        this.rosterEntries = rosterEntries;
+    }
+
+    @Transient
+    public String getAllTeamNames() {
+        return rosterEntries.stream()
+                .map(entry -> entry.getTeam().getName()) // Map each roster entry to the team's name
+                .distinct() // Ensure no duplicate team names
+                .sorted() // Sort alphabetically for consistency
+                .collect(Collectors.joining("; ")); // Concatenate with semicolons
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/Player.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/PlayerEvent.java ====
+package com.dojonate.statsvisualizer.model;
+
+import jakarta.persistence.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+public class PlayerEvent {
+
+    @ElementCollection
+    @Enumerated(EnumType.STRING)
+    private final List<EventType> eventType;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "player_id")
+    private Player batter;
+
+    @ManyToOne
+    @JoinColumn(name = "game_id")
+    private Game game;
+    
+    private int balls;
+
+    private int strikes;
+
+    private int inning;
+
+    private String description;
+
+    @ManyToOne
+    @JoinColumn(name = "batting_team_id")
+    private Team battingTeam;
+
+    @ManyToOne
+    @JoinColumn(name = "fielding_team_id")
+    private Team fieldingTeam;
+
+    @ElementCollection
+    @CollectionTable(name = "player_event_runner_advances", joinColumns = @JoinColumn(name = "event_id"))
+    @AttributeOverrides({
+            @AttributeOverride(name = "baseMovement", column = @Column(name = "base_movement")),
+            @AttributeOverride(name = "details", column = @Column(name = "details"))
+    })
+    private List<RunnerAdvance> runnerAdvances; // Store runner advances like "1-3"
+
+    private List<PitchType> pitchDetails;
+
+    public PlayerEvent() {
+        this.eventType = new ArrayList<>();
+        this.runnerAdvances = new ArrayList<>();
+        this.pitchDetails = new ArrayList<>();
+    }
+
+    // Getters and setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Player getBatter() {
+        return batter;
+    }
+
+    public void setBatter(Player batter) {
+        this.batter = batter;
+    }
+
+    public Game getGame() {
+        return game;
+    }
+
+    public void setGame(Game game) {
+        this.game = game;
+    }
+
+    public List<EventType> getEventType() {
+        return eventType;
+    }
+
+    public void setEventType(EventType eventType) {
+        this.eventType.add(eventType);
+    }
+
+    public void setEventType(List<EventType> eventType) {
+        this.eventType.addAll(eventType);
+    }
+
+    public int getInning() {
+        return inning;
+    }
+
+    public void setInning(int inning) {
+        this.inning = inning;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public Team getBattingTeam() {
+        return battingTeam;
+    }
+
+    public void setBattingTeam(Team battingTeam) {
+        this.battingTeam = battingTeam;
+    }
+
+    public Team getFieldingTeam() {
+        return fieldingTeam;
+    }
+
+    public void setFieldingTeam(Team fieldingTeam) {
+        this.fieldingTeam = fieldingTeam;
+    }
+
+    public List<RunnerAdvance> getRunnerAdvances() {
+        return runnerAdvances;
+    }
+
+    public void setRunnerAdvances(List<RunnerAdvance> runnerAdvances) {
+        this.runnerAdvances = runnerAdvances;
+    }
+
+    public void setCount(int balls, int strikes) {
+        this.balls = balls;
+        this.strikes = strikes;
+    }
+
+    public int[] getCount() {
+        return new int[]{balls, strikes};
+    }
+
+    public int getBalls() {
+        return balls;
+    }
+
+    public int getStrikes() {
+        return strikes;
+    }
+
+    public List<PitchType> getPitchList() {
+        return pitchDetails;
+    }
+
+    public void setPitchList(List<PitchType> pitchDetails) {
+        this.pitchDetails = pitchDetails;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/PlayerEvent.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/Position.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum Position {
+    PITCHER(1, "Pitcher", "P"),
+    CATCHER(2, "Catcher", "C"),
+    FIRST_BASE(3, "First Base", "1B"),
+    SECOND_BASE(4, "Second Base", "2B"),
+    THIRD_BASE(5, "Third Base", "3B"),
+    SHORTSTOP(6, "Shortstop", "SS"),
+    LEFT_FIELD(7, "Left Field", "LF"),
+    CENTER_FIELD(8, "Center Field", "CF"),
+    RIGHT_FIELD(9, "Right Field", "RF"),
+    DESIGNATED_HITTER(10, "Designated Hitter", "DH"),
+    PINCH_HITTER(11, "Pinch Hitter", "PH"),
+    PINCH_RUNNER(12, "Pinch Runner", "PR");
+
+    private final int positionNumber; // e.g., 1 for Pitcher, 2 for Catcher
+    private final String name;        // e.g., Pitcher, Catcher
+    private final String abbreviation; // e.g., P, C
+
+    Position(int positionNumber, String name, String abbreviation) {
+        this.positionNumber = positionNumber;
+        this.name = name;
+        this.abbreviation = abbreviation;
+    }
+
+    public int getPositionNumber() {
+        return positionNumber;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getAbbreviation() {
+        return abbreviation;
+    }
+
+    public static Position fromPositionNumber(int positionNumber) {
+        for (Position position : Position.values()) {
+            if (position.getPositionNumber() == positionNumber) {
+                return position;
+            }
+        }
+        return null;
+    }
+
+    public static Position fromAbbreviation(String abbreviation) {
+        for (Position position : Position.values()) {
+            if (position.getAbbreviation().equals(abbreviation)) {
+                return position;
+            }
+        }
+        return null;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/Position.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/PrecipitationType.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum PrecipitationType {
+    NONE("none"),
+    DRIZZLE("drizzle"),
+    RAIN("rain"),
+    SHOWERS("showers"),
+    SNOW("snow"),
+    UNKNOWN("unknown");
+
+    private final String description;
+
+    PrecipitationType(String description) {
+        this.description = description;
+    }
+
+    public static PrecipitationType fromString(String input) {
+        for (PrecipitationType type : PrecipitationType.values()) {
+            if (type.description.equalsIgnoreCase(input)) {
+                return type;
+            }
+        }
+        return UNKNOWN;
+    }
+
+    @Override
+    public String toString() {
+        return description;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/PrecipitationType.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/RosterEntry.java ====
+package com.dojonate.statsvisualizer.model;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "roster_entry")
+public class RosterEntry {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "player_id", nullable = false)
+    private Player player;
+
+    @ManyToOne
+    @JoinColumn(name = "team_id", nullable = false)
+    private Team team;
+
+    @Column(name = "`year`", nullable = false)
+    private int year;
+
+    @Column(name = "position", nullable = false)
+    private String position;
+
+    public RosterEntry() {}
+
+    public RosterEntry(Player player, Team team, int year, String position) {
+        this.player = player;
+        this.team = team;
+        this.year = year;
+        this.position = position;
+    }
+
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Player getPlayer() {
+        return player;
+    }
+
+    public void setPlayer(Player player) {
+        this.player = player;
+    }
+
+    public Team getTeam() {
+        return team;
+    }
+
+    public void setTeam(Team team) {
+        this.team = team;
+    }
+
+    public int getYear() {
+        return year;
+    }
+
+    public void setYear(int year) {
+        this.year = year;
+    }
+
+    public String getPosition() {
+        return position;
+    }
+
+    public void setPosition(String position) {
+        this.position = position;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/RosterEntry.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/RunnerAdvance.java ====
+package com.dojonate.statsvisualizer.model;
+
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+
+@Embeddable
+public class RunnerAdvance {
+    @ManyToOne
+    @JoinColumn(name = "player_id")
+    private transient Player runner;
+
+    private String baseMovement; // e.g., "2-H", "1-3"
+    private String details;      // e.g., "E4", "GDP"
+    private boolean out;
+
+    // No-arg constructor is required
+    public RunnerAdvance() {
+    }
+
+    public RunnerAdvance(String baseMovement, String details, Player runner) {
+        this.baseMovement = baseMovement;
+        this.details = details;
+        this.runner = runner;
+    }
+
+    public String getBaseMovement() {
+        return baseMovement;
+    }
+
+    public void setBaseMovement(String baseMovement) {
+        this.baseMovement = baseMovement;
+    }
+
+    public String getDetails() {
+        return details;
+    }
+
+    public void setDetails(String details) {
+        this.details = details;
+    }
+
+    public Player getRunner() {
+        return runner;
+    }
+
+    public void setRunner(Player runner) {
+        this.runner = runner;
+    }
+
+    public void setOut(boolean out) {
+        this.out = out;
+    }
+
+    public boolean isOut() {
+        return out;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/RunnerAdvance.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/Site.java ====
+package com.dojonate.statsvisualizer.model;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.util.Calendar;
+
+@Entity
+public class Site {
+    @Id
+    String parkId;
+
+    String name;
+
+    String formerNames;
+
+    String city;
+
+    String state;
+
+    @DateTimeFormat(pattern = "MM/dd/yyyy")
+    Calendar startDate;
+
+    @DateTimeFormat(pattern = "MM/dd/yyyy")
+    Calendar endDate;
+
+    String league;
+
+    String notes;
+
+    // Getters and Setters
+    public String getSiteId() {
+        return parkId;
+    }
+
+    public void setSiteId(String parkId) {
+        this.parkId = parkId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getFormerNames() {
+        return formerNames;
+    }
+
+    public void setFormerNames(String formerNames) {
+        this.formerNames = formerNames;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
+    }
+
+    public Calendar getStartDate() {
+        return startDate;
+    }
+
+    public void setStartDate(Calendar startDate) {
+        this.startDate = startDate;
+    }
+
+    public Calendar getEndDate() {
+        return endDate;
+    }
+
+    public void setEndDate(Calendar endDate) {
+        this.endDate = endDate;
+    }
+
+    public String getLeague() {
+        return league;
+    }
+
+    public void setLeague(String league) {
+        this.league = league;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes;
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/Site.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/SkyType.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum SkyType {
+    CLOUDY("cloudy"),
+    DOME("dome"),
+    NIGHT("night"),
+    OVERCAST("overcast"),
+    SUNNY("sunny"),
+    UNKNOWN("unknown");
+
+    private final String description;
+
+    SkyType(String description) {
+        this.description = description;
+    }
+
+    public static SkyType fromString(String input) {
+        for (SkyType type : SkyType.values()) {
+            if (type.description.equalsIgnoreCase(input)) {
+                return type;
+            }
+        }
+        return UNKNOWN;
+    }
+
+    @Override
+    public String toString() {
+        return description;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/SkyType.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/Team.java ====
+package com.dojonate.statsvisualizer.model;
+
+import jakarta.persistence.*;
+import java.util.HashSet;
+import java.util.Set;
+
+@Entity
+@Table(name = "team")
+public class Team {
+
+    @Id
+    @Column(name = "team_id", unique = true, nullable = false)
+    private String teamId; // e.g., "HOU"
+
+    @Column(name = "team_name", nullable = false)
+    private String name; // e.g., "Houston Astros"
+
+    @Column(name = "league")
+    private String league; // e.g., "NL" or "AL"
+
+    @Column(name = "first_year")
+    private Integer firstYear; // e.g., 1962 (nullable)
+
+    @Column(name = "last_year")
+    private Integer lastYear; // e.g., 2024 (nullable)
+
+    @OneToMany(mappedBy = "team", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<RosterEntry> rosterEntries = new HashSet<>();
+
+    public Team() {}
+
+    public Team(String teamId, String name, String league, Integer firstYear, Integer lastYear) {
+        this.teamId = teamId;
+        this.name = name;
+        this.league = league;
+        this.firstYear = firstYear;
+        this.lastYear = lastYear;
+    }
+
+    // Getters and Setters
+    public String getTeamId() {
+        return teamId;
+    }
+
+    public void setTeamId(String teamId) {
+        this.teamId = teamId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getLeague() {
+        return league;
+    }
+
+    public void setLeague(String league) {
+        this.league = league;
+    }
+
+    public Integer getFirstYear() {
+        return firstYear;
+    }
+
+    public void setFirstYear(Integer firstYear) {
+        this.firstYear = firstYear;
+    }
+
+    public Integer getLastYear() {
+        return lastYear;
+    }
+
+    public void setLastYear(Integer lastYear) {
+        this.lastYear = lastYear;
+    }
+
+    public Set<RosterEntry> getRosterEntries() {
+        return rosterEntries;
+    }
+
+    public void setRosterEntries(Set<RosterEntry> rosterEntries) {
+        this.rosterEntries = rosterEntries;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/Team.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/model/WindDirection.java ====
+package com.dojonate.statsvisualizer.model;
+
+public enum WindDirection {
+    FROM_CENTER_FIELD("fromcf"),
+    FROM_LEFT_FIELD("fromlf"),
+    FROM_RIGHT_FIELD("fromrf"),
+    LEFT_TO_RIGHT("ltor"),
+    RIGHT_TO_LEFT("rtol"),
+    TO_CENTER_FIELD("tocf"),
+    TO_LEFT_FIELD("tolf"),
+    TO_RIGHT_FIELD("torf"),
+    UNKNOWN("unknown");
+
+    private final String description;
+
+    WindDirection(String description) {
+        this.description = description;
+    }
+
+    public static WindDirection fromString(String input) {
+        for (WindDirection direction : WindDirection.values()) {
+            if (direction.description.equalsIgnoreCase(input)) {
+                return direction;
+            }
+        }
+        return UNKNOWN;
+    }
+
+    @Override
+    public String toString() {
+        return description;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/model/WindDirection.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/repository/GameRepository.java ====
+// src/main/java/com/dojonate/statsvisualizer/repository/GameRepository.java
+package com.dojonate.statsvisualizer.repository;
+
+import com.dojonate.statsvisualizer.model.Game;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface GameRepository extends JpaRepository<Game, String> {
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/repository/GameRepository.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/repository/PlayerEventRepository.java ====
+// src/main/java/com/dojonate/statsvisualizer/repository/PlayerEventRepository.java
+package com.dojonate.statsvisualizer.repository;
+
+import com.dojonate.statsvisualizer.model.PlayerEvent;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface PlayerEventRepository extends JpaRepository<PlayerEvent, Long> {
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/repository/PlayerEventRepository.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/repository/PlayerRepository.java ====
+package com.dojonate.statsvisualizer.repository;
+
+import com.dojonate.statsvisualizer.model.Player;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+@org.springframework.stereotype.Repository
+public interface PlayerRepository extends JpaRepository<Player, String> {
+    Page<Player> findByLastNameContainingOrFirstNameContaining(String lastName, String firstName, Pageable pageable);
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/repository/PlayerRepository.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/repository/RosterEntryRepository.java ====
+package com.dojonate.statsvisualizer.repository;
+
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.model.RosterEntry;
+import com.dojonate.statsvisualizer.model.Team;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface RosterEntryRepository extends JpaRepository<RosterEntry, Long> {
+    List<RosterEntry> findByPlayerFirstNameContainingOrPlayerLastNameContainingOrTeamNameContaining(String playerFirstName, String playerLastName, String teamName);
+
+    Optional<RosterEntry> findByPlayerAndTeamAndYear(Player player, Team team, int year);
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/repository/RosterEntryRepository.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/repository/SiteRepository.java ====
+package com.dojonate.statsvisualizer.repository;
+
+import com.dojonate.statsvisualizer.model.Site;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface SiteRepository extends JpaRepository<Site, String> {
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/repository/SiteRepository.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/repository/TeamRepository.java ====
+package com.dojonate.statsvisualizer.repository;
+
+import com.dojonate.statsvisualizer.model.Team;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+@org.springframework.stereotype.Repository
+public interface TeamRepository extends JpaRepository<Team, String> {
+    Page<Team> findByNameContainingIgnoreCase(String name, Pageable pageable);
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/repository/TeamRepository.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/service/GameService.java ====
+package com.dojonate.statsvisualizer.service;
+
+import com.dojonate.statsvisualizer.model.Game;
+import com.dojonate.statsvisualizer.repository.GameRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class GameService {
+
+    private final GameRepository gameRepository;
+
+    public GameService(GameRepository gameRepository) {
+        this.gameRepository = gameRepository;
+    }
+
+    public Game save(Game game) {
+        return gameRepository.save(game);
+    }
+
+    public List<Game> findAll() {
+        return gameRepository.findAll();
+    }
+
+    public Optional<Game> findById(String id) {
+        return gameRepository.findById(id);
+    }
+
+    public void deleteById(String id) {
+        gameRepository.deleteById(id);
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/service/GameService.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/service/PlayerEventService.java ====
+package com.dojonate.statsvisualizer.service;
+
+import com.dojonate.statsvisualizer.model.PlayerEvent;
+import com.dojonate.statsvisualizer.repository.PlayerEventRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class PlayerEventService {
+
+    private final PlayerEventRepository playerEventRepository;
+
+    public PlayerEventService(PlayerEventRepository playerEventRepository) {
+        this.playerEventRepository = playerEventRepository;
+    }
+
+    public PlayerEvent save(PlayerEvent playerEvent) {
+        return playerEventRepository.save(playerEvent);
+    }
+
+    public List<PlayerEvent> saveAll(List<PlayerEvent> playerEvents) {
+        return playerEventRepository.saveAll(playerEvents);
+    }
+
+    public List<PlayerEvent> findAll() {
+        return playerEventRepository.findAll();
+    }
+
+    public Optional<PlayerEvent> findById(Long id) {
+        return playerEventRepository.findById(id);
+    }
+
+    public void deleteById(Long id) {
+        playerEventRepository.deleteById(id);
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/service/PlayerEventService.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/service/PlayerService.java ====
+package com.dojonate.statsvisualizer.service;
+
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.repository.PlayerRepository;
+import org.springframework.data.domain.*;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class PlayerService {
+
+    private final PlayerRepository playerRepository;
+
+    public PlayerService(PlayerRepository playerRepository) {
+        this.playerRepository = playerRepository;
+    }
+
+    // Save a single player
+    public Player save(Player player) {
+        return playerRepository.findById(player.getPlayerId())
+                .orElseGet(() -> playerRepository.save(player));
+    }
+
+    // Find a player by ID
+    public Player findById(String playerId) {
+        return playerRepository.findById(playerId).orElse(null);
+    }
+
+    // Retrieve all players
+    public List<Player> findAll() {
+        return playerRepository.findAll();
+    }
+
+    public Page<Player> getPlayers(String search, int page, int size, String sortBy, String direction) {
+        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return playerRepository.findByLastNameContainingOrFirstNameContaining(search, search, pageable);
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/service/PlayerService.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/service/RosterEntryService.java ====
+package com.dojonate.statsvisualizer.service;
+
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.model.RosterEntry;
+import com.dojonate.statsvisualizer.model.Team;
+import com.dojonate.statsvisualizer.repository.PlayerRepository;
+import com.dojonate.statsvisualizer.repository.RosterEntryRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+
+@Service
+public class RosterEntryService {
+
+    private final RosterEntryRepository rosterEntryRepository;
+    private final PlayerRepository playerRepository;
+
+    public RosterEntryService(RosterEntryRepository rosterEntryRepository, PlayerRepository playerRepository) {
+        this.rosterEntryRepository = rosterEntryRepository;
+        this.playerRepository = playerRepository;
+    }
+
+    public void saveAll(List<RosterEntry> rosterEntries) {
+        for (RosterEntry entry : rosterEntries) {
+            Optional<Player> existingPlayer = playerRepository.findById(entry.getPlayer().getPlayerId());
+            Player player = existingPlayer.orElseGet(() -> playerRepository.save(entry.getPlayer()));
+
+            Optional<RosterEntry> existingEntry = rosterEntryRepository.findByPlayerAndTeamAndYear(player, entry.getTeam(), entry.getYear());
+            if (existingEntry.isEmpty()) {
+                entry.setPlayer(player);
+                rosterEntryRepository.save(entry);
+            }
+        }
+    }
+
+    public Page<Map.Entry<Player, Map<Team, Map.Entry<String, String>>>> getConsolidatedRosters(String search, int page, int size, String sortBy, String direction) {
+        List<RosterEntry> rosterEntries = rosterEntryRepository.findByPlayerFirstNameContainingOrPlayerLastNameContainingOrTeamNameContaining(search, search, search);
+
+        Map<Player, Map<Team, List<RosterEntry>>> groupedEntries = new HashMap<>();
+
+        for (RosterEntry entry : rosterEntries) {
+            groupedEntries
+                    .computeIfAbsent(entry.getPlayer(), k -> new HashMap<>())
+                    .computeIfAbsent(entry.getTeam(), k -> new ArrayList<>())
+                    .add(entry);
+        }
+
+        List<Map.Entry<Player, Map<Team, Map.Entry<String, String>>>> consolidatedEntries = new ArrayList<>();
+
+        for (Map.Entry<Player, Map<Team, List<RosterEntry>>> playerEntry : groupedEntries.entrySet()) {
+            Map<Team, Map.Entry<String, String>> teamYears = new HashMap<>();
+            for (Map.Entry<Team, List<RosterEntry>> teamEntry : playerEntry.getValue().entrySet()) {
+                List<Integer> years = teamEntry.getValue().stream().map(RosterEntry::getYear).sorted().toList();
+                String position = teamEntry.getValue().get(0).getPosition();
+                teamYears.put(teamEntry.getKey(), Map.entry(position, consolidateYears(years)));
+            }
+            consolidatedEntries.add(Map.entry(playerEntry.getKey(), teamYears));
+        }
+
+        // Sort the consolidatedEntries list based on sortBy and direction
+        consolidatedEntries.sort((entry1, entry2) -> {
+            int comparison = switch (sortBy) {
+                case "player.firstName" -> entry1.getKey().getFirstName().compareTo(entry2.getKey().getFirstName());
+                case "player.lastName" -> entry1.getKey().getLastName().compareTo(entry2.getKey().getLastName());
+                default -> 0;
+                // Add more cases if needed
+            };
+            return "asc".equals(direction) ? comparison : -comparison;
+        });
+
+        int start = Math.min(page * size, consolidatedEntries.size());
+        int end = Math.min((page + 1) * size, consolidatedEntries.size());
+        List<Map.Entry<Player, Map<Team, Map.Entry<String, String>>>> paginatedList = consolidatedEntries.subList(start, end);
+
+        return new PageImpl<>(paginatedList, PageRequest.of(page, size), consolidatedEntries.size());
+    }
+
+    private String consolidateYears(List<Integer> years) {
+        if (years.isEmpty()) return "";
+
+        List<String> ranges = new ArrayList<>();
+        int start = years.get(0);
+        int end = start;
+
+        for (int i = 1; i < years.size(); i++) {
+            if (years.get(i) == end + 1) {
+                end = years.get(i);
+            } else {
+                if (start == end) {
+                    ranges.add(String.valueOf(start));
+                } else {
+                    ranges.add(start + "-" + end);
+                }
+                start = years.get(i);
+                end = start;
+            }
+        }
+
+        if (start == end) {
+            ranges.add(String.valueOf(start));
+        } else {
+            ranges.add(start + "-" + end);
+        }
+
+        return String.join("; ", ranges);
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/service/RosterEntryService.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/service/SiteService.java ====
+package com.dojonate.statsvisualizer.service;
+
+import com.dojonate.statsvisualizer.model.Site;
+import com.dojonate.statsvisualizer.repository.SiteRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class SiteService {
+    private final SiteRepository siteRepository;
+
+    public SiteService(SiteRepository siteRepository) {
+        this.siteRepository = siteRepository;
+    }
+
+    // Save a single site
+    public Site save(Site site) {
+        return siteRepository.findById(site.getSiteId())
+                .orElseGet(() -> siteRepository.save(site));
+    }
+
+    // Find a site by ID
+    public Site findById(String siteId) {
+        return siteRepository.findById(siteId).orElse(null);
+    }
+
+    // Retrieve all sites
+    public List<Site> findAll() {
+        return siteRepository.findAll();
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/service/SiteService.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/service/TeamService.java ====
+package com.dojonate.statsvisualizer.service;
+
+import com.dojonate.statsvisualizer.model.Team;
+import com.dojonate.statsvisualizer.repository.TeamRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class TeamService {
+
+    private final TeamRepository teamRepository;
+
+    public TeamService(TeamRepository teamRepository) {
+        this.teamRepository = teamRepository;
+    }
+
+    // Find or create a team by team ID
+    public Team findOrCreateTeam(String teamId, String defaultName, String defaultLeague) {
+        return teamRepository.findById(teamId)
+                .orElseGet(() -> teamRepository.save(new Team(teamId, defaultName, defaultLeague, 0, 0)));
+    }
+
+    public void saveAll(List<Team> teams) {
+        for (Team team : teams) {
+            teamRepository.findById(team.getTeamId()).ifPresentOrElse(existingTeam -> {
+                // Update league, name, firstYear, and lastYear if necessary
+                existingTeam.setLeague(team.getLeague());
+                existingTeam.setName(team.getName());
+                existingTeam.setFirstYear(team.getFirstYear());
+                existingTeam.setLastYear(team.getLastYear());
+                teamRepository.save(existingTeam);
+            }, () ->
+            {
+                // Save new team if it doesn't exist
+                teamRepository.save(team);
+            });
+        }
+    }
+
+    public List<Team> findAll() {
+        return teamRepository.findAll();
+    }
+
+    // Paginated and sortable retrieval of teams
+    public Page<Team> getTeams(String search, int page, int size, String sortBy, String direction) {
+        Pageable pageable = PageRequest.of(page, size,
+                "asc".equalsIgnoreCase(direction)
+                        ? Sort.by(sortBy).ascending()
+                        : Sort.by(sortBy).descending());
+        if (search != null && !search.isEmpty()) {
+            return teamRepository.findByNameContainingIgnoreCase(search, pageable);
+        }
+        return teamRepository.findAll(pageable);
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/service/TeamService.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/util/CsvTeamParser.java ====
+package com.dojonate.statsvisualizer.util;
+
+import com.dojonate.statsvisualizer.model.Team;
+import org.springframework.stereotype.Component;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class CsvTeamParser {
+
+    public List<Team> parseTeamCsv(Path filePath) throws IOException {
+        List<Team> teams = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(filePath)) {
+            String line;
+
+            // Read the header line and skip it
+            if ((line = reader.readLine()) != null) {
+                System.out.println("Skipping header row: " + line); // Debug log for clarity
+            }
+
+            while ((line = reader.readLine()) != null) {
+                String[] fields = line.split(",");
+                if (fields.length >= 6) {
+                    String teamId = fields[0].trim();
+                    String league = fields[1].trim();
+                    String name = fields[2].trim() + " " + fields[3].trim(); // Combine CITY + NICKNAME
+                    int firstYear = Integer.parseInt(fields[4].trim());
+                    int lastYear = Integer.parseInt(fields[5].trim());
+
+                    teams.add(new Team(teamId, name, league, firstYear, lastYear));
+                } else {
+                    System.err.println("Invalid line: " + line);
+                }
+            }
+        }
+
+        return teams;
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/util/CsvTeamParser.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/util/EventDetails.java ====
+package com.dojonate.statsvisualizer.util;
+
+import com.dojonate.statsvisualizer.model.EventType;
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.model.Position;
+import com.dojonate.statsvisualizer.model.RunnerAdvance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static java.lang.Integer.getInteger;
+import static java.lang.Integer.parseInt;
+
+public class EventDetails {
+    private static final Logger logger = LoggerFactory.getLogger(EventDetails.class);
+
+    private final List<EventType> eventTypes;
+    private String description;
+    private List<RunnerAdvance> runnerAdvances; // e.g., "1-2", "2-H" with extra parameters
+    private List<Position> playSequence;
+    private String hitLocation;
+    private String relayLocation;
+
+    public EventDetails() {
+        this.eventTypes = new ArrayList<>();
+        this.runnerAdvances = new ArrayList<>();
+        this.playSequence = new ArrayList<>();
+    }
+
+    public EventDetails(String event, GameState state) {
+        this();
+        parseEventDetails(event, state);
+    }
+
+    // Getters and setters...
+
+    public List<EventType> getEventTypes() {
+        return eventTypes;
+    }
+
+    public void setEventTypes(EventType eventTypes) {
+        this.eventTypes.add(eventTypes);
+    }
+
+    public void setEventType(List<EventType> eventType) {
+        this.eventTypes.addAll(eventType);
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public List<RunnerAdvance> getRunnerAdvances() {
+        return runnerAdvances;
+    }
+
+    public void setRunnerAdvances(List<RunnerAdvance> runnerAdvances) {
+        this.runnerAdvances = runnerAdvances;
+    }
+
+    public List<Position> getPlaySequence() {
+        return playSequence;
+    }
+
+    public void setPlaySequence(List<Position> playSequence) {
+        this.playSequence = playSequence;
+    }
+
+    private void parseEventDetails(String event, GameState state) {
+        // Split the event into two parts: before the period and after.
+        List<String> eventParts = new ArrayList<>(List.of(event.split("\\.", 2)));
+
+        // Process primary event info (before the period)
+        String primaryPart = eventParts.get(0).trim();
+        String[] tokens = primaryPart.split("/");
+        for (String token : tokens) {
+            token = token.trim();
+
+            // Special case: if the token is in the form "F9LF" (letters, digits, letters)
+            // then extract the initial letter(s) as the event code and ignore the rest.
+            if (token.matches("^[A-Za-z]+\\d+[A-Za-z]+$")) {
+                int firstDigitIndex = -1;
+                for (int i = 0; i < token.length(); i++) {
+                    if (Character.isDigit(token.charAt(i))) {
+                        firstDigitIndex = i;
+                        break;
+                    }
+                }
+                if (firstDigitIndex > 0) {
+                    String eventCode = token.substring(0, firstDigitIndex);
+                    eventTypes.add(EventType.fromAbbreviation(eventCode));
+
+                    String hitLocation = token.substring(firstDigitIndex);
+                    if (hitLocation.length() > 1) {
+                        this.hitLocation = hitLocation.substring(1);
+                    }
+                }
+                continue; // Skip the remainder of the loop for this token.
+            }
+
+            // Existing logic for tokens with "+" symbols.
+            if (token.contains("+")) {
+                String[] subTokens = token.split("\\+");
+                for (String sub : subTokens) {
+                    if (!sub.isEmpty() && !sub.contains("SB")) {
+                        eventTypes.add(EventType.fromAbbreviation(sub));
+                    } else {
+                        eventTypes.add(EventType.STOLEN_BASE);
+                        String baseStolen = sub.replaceAll("\\D", "");
+                        int base = parseInt(baseStolen);
+                        eventParts.add(base - 1 + "-" + base);
+                    }
+                }
+            } else if (token.contains("-")) {
+                String cleaned = token.replace("-", "");
+                eventTypes.add(EventType.fromAbbreviation(cleaned));
+            } else if (token.matches(".*\\d.*")) {
+                // Remove any parenthesized groups so that digits inside them aren’t interpreted as positions.
+                String tokenNoParams = token.replaceAll("\\([^)]*\\)", "").trim();
+                // Now extract letters and digits separately.
+                List<String> eventPartTokens = List.of(tokenNoParams.replaceAll("[^a-zA-Z]", "/").split("/"));
+                String positionsToken = tokenNoParams.replaceAll("[^\\d]", "");
+                if (!positionsToken.isEmpty() && eventPartTokens.isEmpty()) {
+                    // For example, a token like "23" means add positions for runner on 2 then 3.
+                    for (char ch : positionsToken.toCharArray()) {
+                        int index = Character.getNumericValue(ch);
+                        Position pos = Position.fromPositionNumber(index);
+                        if (pos != null && (playSequence.isEmpty() || pos != playSequence.get(playSequence.size() - 1))) {
+                            playSequence.add(pos);
+                        }
+                    }
+                } else {
+                    for (String eventPartToken : eventPartTokens) {
+                        if (eventPartToken.equalsIgnoreCase("HR")) {
+                            eventTypes.add(EventType.INSIDE_THE_PARK_HOME_RUN);
+                        } else {
+                            EventType eventType = EventType.fromAbbreviation(eventPartToken);
+                            eventTypes.add(eventType);
+                            if (eventType == EventType.RELAY_THROW) {
+                                relayLocation = positionsToken;
+                            }
+                        }
+                    }
+                }
+            } else {
+                eventTypes.add(EventType.fromAbbreviation(token));
+            }
+        }
+
+        // Process runner advances (if any)
+        if (eventParts.size() > 1) {
+            String runnerData = eventParts.get(1).trim();
+            // (Assuming validateRunnerAdvances(runnerData) throws an exception on invalid data.)
+            validateRunnerAdvances(runnerData);
+            List<RunnerAdvance> advances = parseRunnerAdvances(runnerData, state);
+            setRunnerAdvances(advances);
+        }
+
+        // Build a human–readable description from the event type, play sequence, and runner advances.
+        setDescription(buildDescription());
+    }
+
+
+    private List<RunnerAdvance> parseRunnerAdvances(String runnerData, GameState state) {
+        List<RunnerAdvance> advances = new ArrayList<>();
+        // Split runner advances on semicolon.
+        String[] tokens = runnerData.split(";");
+
+        // Build an ordered list of base runners – per Retrosheet the non-batter advances apply in the order:
+        // runner on third first, then second, then first.
+        List<Player> nonBatterRunners = new ArrayList<>();
+        if (state.getThirdBase() != null) nonBatterRunners.add(state.getThirdBase());
+        if (state.getSecondBase() != null) nonBatterRunners.add(state.getSecondBase());
+        if (state.getFirstBase() != null) nonBatterRunners.add(state.getFirstBase());
+        int nonBatterIndex = 0;
+
+        // Pattern to capture any parenthesized groups.
+        Pattern paramPattern = Pattern.compile("\\(([^)]+)\\)");
+
+        for (String token : tokens) {
+            token = token.trim();
+            // Extract parameters, if any.
+            Matcher matcher = paramPattern.matcher(token);
+            List<String> params = new ArrayList<>();
+            while (matcher.find()) {
+                params.add(matcher.group(1).trim());
+            }
+            // Remove all parenthesized parts from the token.
+            String baseMovement = token.replaceAll("\\([^)]*\\)", "").trim();
+
+            // Determine which runner this advance applies to.
+            Player runner;
+            if (baseMovement.startsWith("B")) {
+                // Advance starting with B applies to the batter.
+                // baseMovement = baseMovement.substring(1).trim();
+                runner = state.getBatter();
+            } else {
+                // Otherwise, assign the next runner in order.
+                if (nonBatterIndex < nonBatterRunners.size()) {
+                    runner = nonBatterRunners.get(nonBatterIndex++);
+                } else {
+                    runner = null; // (Log a warning if desired.)
+                }
+            }
+
+            // Create the RunnerAdvance.
+            RunnerAdvance advance = new RunnerAdvance(baseMovement, null, runner);
+
+            // Process parameters: if any parameter is exactly a single digit (1,2,3) or "B", we interpret that as an out.
+            List<String> modifiers = new ArrayList<>();
+            for (String p : params) {
+                if (p.matches("^[123B]$")) {
+                    advance.setOut(true);
+                } else {
+                    modifiers.add(p);
+                }
+            }
+            if (!modifiers.isEmpty()) {
+                advance.setDetails(String.join(";", modifiers));
+            }
+
+            advances.add(advance);
+        }
+
+        // Now update the game state based on each advance.
+        // We expect the baseMovement string to be of the form "X-Y" (or "BX2" was already handled above).
+        for (RunnerAdvance adv : advances) {
+            String move = adv.getBaseMovement();
+            if (move.length() >= 3) {
+                char fromChar = move.charAt(0);
+                char toChar = move.charAt(2);
+                int fromBase = Character.isDigit(fromChar) ? Character.getNumericValue(fromChar) : -1;
+                // If toChar is H (for home) then we treat that as "0".
+                int toBase = (toChar == 'H' || toChar == 'h') ? 0 : (Character.isDigit(toChar) ? Character.getNumericValue(toChar) : -1);
+
+                // Remove runner from his starting base.
+                if (fromBase == 1) {
+                    state.setFirstBase(null);
+                } else if (fromBase == 2) {
+                    state.setSecondBase(null);
+                } else if (fromBase == 3) {
+                    state.setThirdBase(null);
+                }
+
+                // If the advance did not result in an out, then put the runner on the destination base.
+                if (!adv.isOut()) {
+                    if (toBase == 1) {
+                        state.setFirstBase(adv.getRunner());
+                    } else if (toBase == 2) {
+                        state.setSecondBase(adv.getRunner());
+                    } else if (toBase == 3) {
+                        state.setThirdBase(adv.getRunner());
+                    }
+                    // For toBase==0 (home), you might want to record a scored run.
+                }
+            }
+        }
+
+        // (Optionally clear the state if you want the next play to start fresh.)
+        // For example:
+        // state.setBatter(null);
+        // state.setFirstBase(null);
+        // state.setSecondBase(null);
+        // state.setThirdBase(null);
+
+        return advances;
+    }
+
+    private void validateRunnerAdvances(String advances) {
+        // Split on semicolons to get each advance token.
+        String[] parts = advances.split(";");
+        for (String part : parts) {
+            // Extract the base movement part (everything before the first parenthesis, if present)
+            String baseMovement = part.contains("(") ? part.substring(0, part.indexOf("(")) : part;
+            baseMovement = baseMovement.trim();
+            if (!baseMovement.matches("^[B1-3H](?:[-X][B1-3H])?$")) {
+                throw new IllegalArgumentException("Invalid runner advance base movement format: " + baseMovement);
+            }
+        }
+    }
+
+    private String buildDescription() {
+        StringBuilder description = new StringBuilder();
+
+        description.append("Event: ");
+        if (!playSequence.isEmpty()) {
+            for (int i = 0; i < playSequence.size() - 1; i++) {
+                description.append(playSequence.get(i).getPositionNumber()).append("-");
+            }
+            description.append(playSequence.get(playSequence.size() - 1).getPositionNumber()).append(" ");
+        }
+        for (int i = 0; i < eventTypes.size() - 1; i++) {
+            description.append(eventTypes.get(i).getDescription()).append(" ");
+        }
+        if (!eventTypes.isEmpty()) {
+            description.append(eventTypes.get(eventTypes.size() - 1).getDescription());
+        }
+        if (!runnerAdvances.isEmpty()) {
+            description.append(", Runner Advances: ");
+            for (RunnerAdvance advance : runnerAdvances) {
+                description.append(advance.getBaseMovement());
+                if (advance.getDetails() != null) {
+                    description.append(" (").append(advance.getDetails()).append(")");
+                }
+                description.append("; ");
+            }
+        }
+        return description.toString().trim();
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/util/EventDetails.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/util/EventFileParser.java ====
+package com.dojonate.statsvisualizer.util;
+
+import com.dojonate.statsvisualizer.model.*;
+import com.dojonate.statsvisualizer.service.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
+import java.util.*;
+
+@Component
+public class EventFileParser {
+
+    private static final Logger logger = LoggerFactory.getLogger(EventFileParser.class);
+
+    @Autowired
+    private final PlayerService playerService;
+    @Autowired
+    private final TeamService teamService;
+    private final SiteService siteService;
+    String gameDate;
+
+    public EventFileParser(TeamService teamService, PlayerService playerService, SiteService siteService, GameService gameService, PlayerEventService playerEventService, RosterEntryService rosterEntryService) {
+        this.teamService = teamService;
+        this.playerService = playerService;
+        this.siteService = siteService;
+    }
+
+    /**
+     * Parse a file that may contain multiple games.
+     * Each game is assumed to start with an "id" record.
+     * Returns a list of Game objects.
+     */
+    public List<Game> parseMultiple(String content) {
+        if (!isValidEventFile(content)) {
+            throw new IllegalArgumentException("Invalid event file.");
+        }
+
+        List<Game> games = new ArrayList<>();
+        String[] lines = content.split("\n");
+
+        // Variables to hold state for the current game being processed
+        Game currentGame = null;
+        List<PlayerEvent> currentPlayerEvents = new ArrayList<>();
+        Map<String, Player> players = new HashMap<>();
+        Map<String, Team> teams = new HashMap<>();
+        GameState state = new GameState();
+        gameDate = null;
+
+        for (String line : lines) {
+            String[] parts = line.split(",", -1);
+            switch (parts[0]) {
+                case "id":
+                    // When a new game starts, finalize the previous one (if any)
+                    if (currentGame != null) {
+                        currentGame.setPlayerEvents(currentPlayerEvents);
+                        games.add(currentGame);
+                    }
+                    // Reset state for new game
+                    currentGame = new Game();
+                    currentPlayerEvents = new ArrayList<>();
+                    players = new HashMap<>();
+                    teams = new HashMap<>();
+                    state = new GameState();
+                    currentGame.setId(parts[1]);
+                    break;
+                case "info":
+                    handleInfo(currentGame, parts);
+                    if ("date".equals(parts[1])) {
+                        gameDate = parts[2];
+                    }
+                    break;
+                case "start":
+                case "sub":
+                    handlePlayer(parts, players, teams);
+                    break;
+                case "play":
+                    try {
+                        PlayerEvent playerEvent = handlePlay(parts, players, currentGame, state);
+                        currentPlayerEvents.add(playerEvent);
+                    } catch (Exception e) {
+                        logger.error("Failed to parse play record: {}", Arrays.toString(parts), e);
+                        throw e;
+                    }
+                    break;
+                case "com":
+                    // Optionally handle comments here
+                    break;
+                case "data":
+                    // Optionally handle additional data here
+                    break;
+                default:
+                    // Log unknown record types
+                    logger.warn("Unknown record type: {}", parts[0]);
+                    break;
+            }
+        }
+        // Add the last game if present
+        if (currentGame != null) {
+            currentGame.setPlayerEvents(currentPlayerEvents);
+            games.add(currentGame);
+        }
+        return games;
+    }
+
+    private boolean isValidEventFile(String content) {
+        // Basic checks for essential records
+        if (!content.startsWith("id") || !content.contains("play")) {
+            logger.warn("Event file validation failed: Missing essential records.");
+            return false;
+        }
+        // Additional validation
+        String[] lines = content.split("\n");
+        for (String line : lines) {
+            if (!isValidRecord(line)) {
+                logger.warn("Event file validation failed: Invalid record found - {}", line);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isValidRecord(String line) {
+        String[] parts = line.split(",", -1);
+        return switch (parts[0]) {
+            case "id" -> parts.length == 2 && parts[1].length() > 4 && parts[1].substring(3).matches("\\d+");
+            case "info" -> parts.length >= 3;
+            case "play" -> parts.length >= 7;
+            case "start", "sub" -> parts.length >= 6;
+            case "badj", "radj", "padj", "com", "data", "version" -> true;
+            default -> {
+                logger.warn("Unknown record type: {}", parts[0]);
+                yield false;
+            }
+        };
+    }
+
+    private void handleInfo(Game game, String[] parts) {
+        switch (parts[1]) {
+            case "visteam":
+                game.setAwayTeam(teamService.findOrCreateTeam(parts[2], "", ""));
+                break;
+            case "hometeam":
+                game.setHomeTeam(teamService.findOrCreateTeam(parts[2], "", ""));
+                break;
+            case "site":
+                game.setSite(siteService.findById(parts[2]));
+                break;
+            case "date":
+                gameDate = parts[2];
+                break;
+            case "number":
+                Integer gameNumber = Integer.parseInt(parts[2]);
+                if (!gameNumber.equals(0)) {
+                    game.setId(game.getId() + "-" + gameNumber);
+                }
+                game.setGameNumber(gameNumber);
+                break;
+            case "starttime":
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd h:mma");
+                TemporalAccessor dateOfGame = formatter.parse(gameDate + " " + parts[2]);
+                game.setStartTime(parts[2]);
+                break;
+            case "daynight":
+                game.setNightGame("night".equals(parts[2]));
+                break;
+            case "usedh":
+                game.setUseDesignatedHitter(Boolean.parseBoolean(parts[2]));
+                break;
+            case "umphome":
+                game.setUmphome(parts[2]);
+                break;
+            case "ump1b":
+                game.setUmp1b(parts[2]);
+                break;
+            case "ump2b":
+                game.setUmp2b(parts[2]);
+                break;
+            case "ump3b":
+                game.setUmp3b(parts[2]);
+                break;
+            case "pitches":
+                game.setPitches(parts[2]);
+                if (!"pitches".equals(parts[2])) {
+                    logger.warn("Pitch-by-pitch not recorded");
+                }
+                break;
+            case "oscorer":
+                game.setOfficialScorer(parts[2]);
+                break;
+            case "temp":
+                game.setTemperature(Integer.parseInt(parts[2]));
+                break;
+            case "winddir":
+                game.setWindDirection(WindDirection.fromString(parts[2]));
+                break;
+            case "windspeed":
+                game.setWindSpeed(Integer.parseInt(parts[2]));
+                break;
+            case "fieldcond":
+                game.setFieldConditions(FieldConditions.fromDescription(parts[2]));
+                break;
+            case "precip":
+                game.setPrecipitation(PrecipitationType.fromString(parts[2]));
+                break;
+            case "sky":
+                game.setSky(SkyType.fromString(parts[2]));
+                break;
+            case "timeofgame":
+                game.setLengthOfGame(Integer.parseInt(parts[2]));
+                break;
+            case "attendance":
+                game.setAttendance(Integer.parseInt(parts[2]));
+                break;
+            case "wp":
+                game.setWp(playerService.findById(parts[2]));
+                break;
+            case "lp":
+                game.setLp(playerService.findById(parts[2]));
+                break;
+            case "save":
+                game.setSave(playerService.findById(parts[2]));
+                break;
+            default:
+                // Handle other info types if necessary
+                break;
+        }
+    }
+
+    private void handlePlayer(String[] parts, Map<String, Player> players, Map<String, Team> teams) {
+        String playerId = parts[1];
+        String playerName = parts[2];
+        String teamId = parts[3];
+        int battingOrder = Integer.parseInt(parts[4]);
+        int position = Integer.parseInt(parts[5]);
+
+        Player player = players.computeIfAbsent(playerId, id -> {
+            String[] nameParts = playerName.split(" ");
+            String firstName = nameParts[0];
+            String lastName = nameParts[1];
+            Player newPlayer = playerService.findById(playerId);
+            if (newPlayer == null) {
+                newPlayer = playerService.save(new Player(playerId, firstName, lastName, "", "", java.time.LocalDate.of(1900, 1, 1)));
+            }
+            return newPlayer;
+        });
+
+        teams.computeIfAbsent(teamId, id -> teamService.findOrCreateTeam(id, "", ""));
+    }
+
+    private PlayerEvent handlePlay(String[] parts, Map<String, Player> players, Game game, GameState state) {
+        try {
+            int inning = Integer.parseInt(parts[1]);
+            Team battingTeam = "0".equals(parts[2]) ? game.getAwayTeam() : game.getHomeTeam();
+            Team fieldingTeam = "0".equals(parts[2]) ? game.getHomeTeam() : game.getAwayTeam();
+            String playerId = parts[3];
+            String countCumulative = parts[4];
+            String pitches = parts[5];
+            String event = parts[6];
+
+            Player player = players.get(playerId);
+            int balls = Character.getNumericValue(countCumulative.charAt(0));
+            int strikes = Character.getNumericValue(countCumulative.charAt(1));
+
+
+            // Parse the count field for pitch and events
+            List<PitchType> pitchDetails = parsePitchDetails(pitches);
+            state.setBatter(player);
+
+            // Parse the event field for details
+            EventDetails eventDetails = new EventDetails(event, state);
+
+
+            // Create the PlayerEvent object
+            PlayerEvent playerEvent = new PlayerEvent();
+            playerEvent.setGame(game);
+            playerEvent.setBatter(player);
+            playerEvent.setBattingTeam(battingTeam);
+            playerEvent.setFieldingTeam(fieldingTeam);
+            playerEvent.setInning(inning);
+            playerEvent.setCount(balls, strikes);
+            playerEvent.setPitchList(pitchDetails);
+            playerEvent.setEventType(eventDetails.getEventTypes());
+            playerEvent.setDescription(eventDetails.getDescription());
+            playerEvent.setRunnerAdvances(eventDetails.getRunnerAdvances());
+
+            return playerEvent;
+        } catch (Exception e) {
+            logger.error("Failed to parse play record: {}", Arrays.toString(parts), e);
+            throw e;
+        }
+    }
+
+    private List<PitchType> parsePitchDetails(String pitches) {
+        List<PitchType> details = new ArrayList<>();
+        for (Character c : pitches.toCharArray()) {
+            PitchType pitchCount = PitchType.fromAbbreviation(c.toString());
+            if (c.equals('+')) {
+                details.set(details.size() - 1, PitchType.fromAbbreviation(details.get(details.size() - 1).getAbbreviation() + "+"));
+            } else if (pitchCount != null) {
+                details.add(pitchCount);
+            } else {
+                throw new IllegalArgumentException("Invalid pitch type: " + c);
+            }
+        }
+        return details;
+    }
+
+    // The original parse(String content) method could delegate to parseMultiple() and return the first game if desired:
+    public Game parse(String content) {
+        List<Game> games = parseMultiple(content);
+        if (games.isEmpty()) {
+            throw new IllegalArgumentException("No valid games found in the event file.");
+        }
+        return games.get(0); // or handle as appropriate
+    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/util/EventFileParser.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/util/GameState.java ====
+package com.dojonate.statsvisualizer.util;
+
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.model.RunnerAdvance;
+
+import java.util.List;
+
+public class GameState {
+    private Player batter;
+    private Player firstBase;
+    private Player secondBase;
+    private Player thirdBase;
+
+    public GameState() {
+        this.batter = null;
+        this.firstBase = null;
+        this.secondBase = null;
+        this.thirdBase = null;
+    }
+
+    // Getters and setters for each base
+
+    public Player getBatter() {
+        return batter;
+    }
+
+    public void setBatter(Player batter) {
+        this.batter = batter;
+    }
+
+    public Player getFirstBase() {
+        return firstBase;
+    }
+
+    public void setFirstBase(Player firstBase) {
+        this.firstBase = firstBase;
+    }
+
+    public Player getSecondBase() {
+        return secondBase;
+    }
+
+    public void setSecondBase(Player secondBase) {
+        this.secondBase = secondBase;
+    }
+
+    public Player getThirdBase() {
+        return thirdBase;
+    }
+
+    public void setThirdBase(Player thirdBase) {
+        this.thirdBase = thirdBase;
+    }
+
+//    // You may also want a method to “advance” the runners when a play is processed.
+//    // For example:
+//    public void processPlay(Player batter, List<RunnerAdvance> advances) {
+//        for (RunnerAdvance advance : advances) {
+//            // Logic to move runners based on the advance details
+//        }
+//    }
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/util/GameState.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/util/RosFileParser.java ====
+package com.dojonate.statsvisualizer.util;
+
+import com.dojonate.statsvisualizer.model.Player;
+import com.dojonate.statsvisualizer.model.RosterEntry;
+import com.dojonate.statsvisualizer.model.Team;
+import org.springframework.stereotype.Component;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class RosFileParser {
+
+    public List<RosterEntry> parseRosFile(Path filePath, Team team) throws IOException {
+        List<RosterEntry> rosterEntries = new ArrayList<>();
+
+        // Extract the year from the filename (e.g., "TEX2011.ROS")
+        String fileName = filePath.getFileName().toString();
+        int year = Integer.parseInt(fileName.substring(3, 7)); // Assumes the filename starts with the year
+
+        try (BufferedReader reader = Files.newBufferedReader(filePath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] fields = line.split(",");
+                if (fields.length >= 7) {
+                    // Create a Player object
+                    RosterEntry rosterEntry = getRosterEntry(team, fields, year);
+
+                    rosterEntries.add(rosterEntry);
+                } else {
+                    System.err.println("Invalid line: " + line);
+                }
+            }
+        }
+
+        return rosterEntries;
+    }
+
+    private static RosterEntry getRosterEntry(Team team, String[] fields, int year) {
+        Player player = new Player();
+        player.setPlayerId(fields[0].trim());
+        player.setLastName(fields[1].trim());
+        player.setFirstName(fields[2].trim());
+        player.setBattingHand(fields[3].trim());
+        player.setThrowingHand(fields[4].trim());
+
+        // Create a RosterEntry object
+        return new RosterEntry(player, team, year, fields[6].trim());
+    }
+}
+==== END OF src/main/java/com/dojonate/statsvisualizer/util/RosFileParser.java ====
+==== START OF src/main/java/com/dojonate/statsvisualizer/StatsVisualizerApplication.java ====
+package com.dojonate.statsvisualizer;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class StatsVisualizerApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(StatsVisualizerApplication.class, args);
+	}
+
+}
+
+==== END OF src/main/java/com/dojonate/statsvisualizer/StatsVisualizerApplication.java ====
+==== START OF src/main/resources/templates/fragments/footer.html ====
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="footer">
+    <footer class="page-footer grey darken-4">
+        <div class="container">
+            <div class="row">
+                <div class="col l6 s12">
+                    <h5 class="white-text">Stats Visualizer</h5>
+                    <p class="grey-text text-lighten-4">&copy; 2025 dojonate. All rights reserved. Data courtesy
+                        Retrosheets.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+</div>
+</body>
+</html>
+==== END OF src/main/resources/templates/fragments/footer.html ====
+==== START OF src/main/resources/templates/fragments/header.html ====
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="header">
+    <nav class="nav-wrapper grey darken-4">
+        <div class="container">
+            <a class="brand-logo" href="#" th:href="@{/}">Stats Visualizer</a>
+            <a class="sidenav-trigger" data-target="mobile-demo" href="#"><i class="material-icons">menu</i></a>
+            <ul class="right hide-on-med-and-down">
+                <li><a th:href="@{/}">Home</a></li>
+                <li><a th:href="@{/players}">Players</a></li>
+                <li><a th:href="@{/teams}">Teams</a></li>
+                <li><a th:href="@{/rosters}">Rosters</a></li>
+                <li><a th:href="@{/games}">Games</a></li>
+                <li><a href="#" onclick="toggleDarkMode()">Toggle Dark Mode</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <ul class="sidenav grey darken-4" id="mobile-demo">
+        <li><a th:href="@{/}">Home</a></li>
+        <li><a th:href="@{/players}">Players</a></li>
+        <li><a th:href="@{/teams}">Teams</a></li>
+        <li><a th:href="@{/rosters}">Rosters</a></li>
+        <li><a href="#" onclick="toggleDarkMode()">Toggle Dark Mode</a></li>
+    </ul>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var elems = document.querySelectorAll('.sidenav');
+        var instances = M.Sidenav.init(elems);
+    });
+</script>
+</body>
+</html>
+==== END OF src/main/resources/templates/fragments/header.html ====
+==== START OF src/main/resources/templates/fragments/pagination.html ====
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="pagination(currentPage, totalPages, search, url)">
+    <ul class="pagination">
+        <li class="waves-effect" th:classappend="${currentPage == 1} ? 'disabled'">
+            <a th:href="@{${url}(page=${currentPage - 1}, search=${search})}"><i class="material-icons">chevron_left</i></a>
+        </li>
+        <li th:classappend="${currentPage == page} ? 'active'"
+            th:each="page : ${#numbers.sequence(currentPage > 2 ? currentPage - 2 : 1, currentPage < totalPages - 2 ? currentPage + 2 : totalPages)}">
+            <a th:href="@{${url}(page=${page}, search=${search})}" th:text="${page}"></a>
+        </li>
+        <li class="waves-effect" th:classappend="${currentPage == totalPages} ? 'disabled'">
+            <a th:href="@{${url}(page=${currentPage + 1}, search=${search})}"><i
+                    class="material-icons">chevron_right</i></a>
+        </li>
+    </ul>
+</div>
+</body>
+</html>
+==== END OF src/main/resources/templates/fragments/pagination.html ====
+==== START OF src/main/resources/templates/fragments/styles-scripts.html ====
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="styles(title)">
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title th:text="${title}">Default Title</title>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet">
+    <style>
+        body.dark-mode {
+            background-color: #121212;
+            color: #ffffff;
+        }
+        .dark-mode .nav-wrapper, .dark-mode .sidenav, .dark-mode .page-footer, .dark-mode .card {
+            background-color: #424242;
+        }
+        .dark-mode .white-text {
+            color: #ffffff !important;
+        }
+        .dark-mode .grey-text.text-lighten-4 {
+            color: #bdbdbd !important;
+        }
+    </style>
+</head>
+<div th:fragment="scripts">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.body.classList.add('dark-mode');
+            }
+            var elems = document.querySelectorAll('.sidenav');
+            var instances = M.Sidenav.init(elems);
+        });
+    </script>
+</div>
+</html>
+==== END OF src/main/resources/templates/fragments/styles-scripts.html ====
+==== START OF src/main/resources/templates/index.html ====
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/styles-scripts :: styles('Home')}"></head>
+<body>
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main>
+    <h1>Welcome to the Baseball Stats Visualizer</h1>
+    <p>Use the navigation menu to explore players and statistics.</p>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>
+
+==== END OF src/main/resources/templates/index.html ====
+==== START OF src/main/resources/templates/players.html ====
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/styles-scripts :: styles('Players List')}"></head>
+<body class="grey darken-4">
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main class="container">
+    <h1 class="center-align white-text">Players</h1>
+
+    <!-- Search Bar -->
+    <form class="row" method="get" th:action="@{/players}">
+        <div class="input-field col s12 m6">
+            <input class="white-text" id="search" name="search" th:value="${search}" type="text">
+            <label class="white-text" for="search">Search by name or team</label>
+        </div>
+        <div class="input-field col s12 m6">
+            <button class="btn waves-effect waves-light" type="submit">Search</button>
+        </div>
+    </form>
+
+    <!-- Player Table -->
+    <div class="card grey darken-3">
+        <div class="card-content">
+            <table class="highlight responsive-table">
+                <thead>
+                <tr>
+                    <th class="white-text">
+                        <a th:href="@{/players(sortBy='lastName', direction=${sortBy == 'lastName' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Last Name
+                            <span th:if="${sortBy == 'lastName'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/players(sortBy='firstName', direction=${sortBy == 'firstName' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            First Name
+                            <span th:if="${sortBy == 'firstName'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/players(sortBy='allTeamNames', direction=${sortBy == 'allTeamNames' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Team
+                            <span th:if="${sortBy == 'allTeamNames'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/players(sortBy='battingHand', direction=${sortBy == 'battingHand' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Batting Hand
+                            <span th:if="${sortBy == 'battingHand'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/players(sortBy='throwingHand', direction=${sortBy == 'throwingHand' && direction == 'asc' ? 'desc' : 'asc'})}">
+                            Throwing Hand
+                            <span th:if="${sortBy == 'throwingHand'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="player : ${players}">
+                    <td class="white-text" th:text="${player.lastName}"></td>
+                    <td class="white-text" th:text="${player.firstName}"></td>
+                    <td class="white-text" th:text="${player.allTeamNames}"></td>
+                    <td class="white-text" th:text="${player.battingHand}"></td>
+                    <td class="white-text" th:text="${player.throwingHand}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div th:replace="~{fragments/pagination :: pagination(${currentPage}, ${totalPages}, ${search}, '/players')}"></div>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>
+==== END OF src/main/resources/templates/players.html ====
+==== START OF src/main/resources/templates/rosters.html ====
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/styles-scripts :: styles('Rosters')}"></head>
+<body class="grey darken-4">
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main class="container">
+    <h1 class="center-align white-text">Rosters</h1>
+
+    <!-- Search Bar -->
+    <form class="row" method="get" th:action="@{/rosters}">
+        <div class="input-field col s12 m6">
+            <input class="white-text" id="search" name="search" th:value="${search}" type="text">
+            <label class="white-text" for="search">Search by player name or team</label>
+        </div>
+        <div class="input-field col s12 m6">
+            <input name="sortBy" th:value="${sortBy}" type="hidden">
+            <input name="direction" th:value="${direction}" type="hidden">
+            <button class="btn waves-effect waves-light" type="submit">Search</button>
+        </div>
+    </form>
+
+    <!-- Rosters Table -->
+    <div class="card grey darken-3">
+        <div class="card-content">
+            <table class="highlight responsive-table">
+                <thead>
+                <tr>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='player.firstName', direction=${sortBy == 'player.firstName' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Player First Name
+                            <span th:if="${sortBy == 'player.firstName'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/rosters(sortBy='player.lastName', direction=${sortBy == 'player.lastName' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Player Last Name
+                            <span th:if="${sortBy == 'player.lastName'}"
+                                  th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">Teams</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="entry : ${consolidatedRosters.content}">
+                    <td class="white-text" th:text="${entry.key.firstName}"></td>
+                    <td class="white-text" th:text="${entry.key.lastName}"></td>
+                    <td>
+                        <table class="highlight responsive-table">
+                            <thead>
+                            <tr>
+                                <th class="white-text" style="width: 150px;">Team Name</th>
+                                <th class="white-text" style="width: 100px;">Position</th>
+                                <th class="white-text" style="width: 100px;">Years</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="teamEntry : ${entry.value}">
+                                <td class="white-text" th:text="${teamEntry.key.name}"></td>
+                                <td class="white-text" th:text="${teamEntry.value.key}"></td>
+                                <td class="white-text" th:text="${teamEntry.value.value}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div th:replace="~{fragments/pagination :: pagination(${consolidatedRosters.number + 1}, ${consolidatedRosters.totalPages}, ${search}, '/rosters')}"></div>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>
+==== END OF src/main/resources/templates/rosters.html ====
+==== START OF src/main/resources/templates/teams.html ====
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/styles-scripts :: styles('Teams')}"></head>
+<body>
+<div th:replace="~{fragments/header :: header}"></div>
+
+<main class="container">
+    <h1 class="center-align white-text">Teams</h1>
+
+    <!-- Search Bar -->
+    <form class="row" method="get" th:action="@{/teams}">
+        <div class="input-field col s12 m6">
+            <input class="white-text" id="search" name="search" th:value="${search}" type="text">
+            <label class="white-text" for="search">Search by team name or league</label>
+        </div>
+        <div class="input-field col s12 m6">
+            <button class="btn waves-effect waves-light" type="submit">Search</button>
+        </div>
+    </form>
+
+    <!-- Teams Table -->
+    <div class="card grey darken-3">
+        <div class="card-content">
+            <table class="highlight responsive-table">
+                <thead>
+                <tr>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='name', direction=${sortBy == 'teamName' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Team Name
+                            <span th:if="${sortBy == 'name'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='teamId', direction=${sortBy == 'teamId' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Abbreviation
+                            <span th:if="${sortBy == 'teamId'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='firstYear', direction=${sortBy == 'firstYear' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            First Year of Play
+                            <span th:if="${sortBy == 'firstYear'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='lastYear', direction=${sortBy == 'lastYear' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            Final Year of Play
+                            <span th:if="${sortBy == 'lastYear'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                    <th class="white-text">
+                        <a th:href="@{/teams(sortBy='league', direction=${sortBy == 'league' && direction == 'asc' ? 'desc' : 'asc'}, search=${search})}">
+                            League
+                            <span th:if="${sortBy == 'league'}" th:text="${direction == 'asc' ? '▲' : '▼'}"></span>
+                        </a>
+                    </th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="team : ${teams}">
+                    <td class="white-text" th:text="${team.name}"></td>
+                    <td class="white-text" th:text="${team.teamId}"></td>
+                    <td class="white-text" th:text="${team.firstYear}"></td>
+                    <td class="white-text">
+                    <span th:if="${(team.lastYear == T(java.time.Year).now().getValue()) || (team.lastYear == (T(java.time.Year).now().getValue() - 1)) }"
+                          th:text="'Active'"></span>
+                        <span th:if="${(team.lastYear != T(java.time.Year).now().getValue()) && (team.lastYear != T(java.time.Year).now().getValue() - 1)}"
+                              th:text="${team.lastYear}"></span>
+                    </td>
+                    <td class="white-text" th:text="${team.league}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div th:replace="~{fragments/pagination :: pagination(${currentPage}, ${totalPages}, ${search}, '/teams')}"></div>
+</main>
+
+<div th:replace="~{fragments/footer :: footer}"></div>
+<div th:replace="~{fragments/styles-scripts :: scripts}"></div>
+</body>
+</html>
+==== END OF src/main/resources/templates/teams.html ====
+==== START OF build.gradle ====
+plugins {
+    id 'java'
+    id("org.jetbrains.kotlin.jvm") version '1.9.10'
+    id("org.springframework.boot") version "3.4.2"
+    id('io.spring.dependency-management') version '1.1.7'
+}
+
+group = 'com.dojonate'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.postgresql:postgresql'
+    testImplementation 'com.h2database:h2:2.2.220'
+    testImplementation 'org.mockito:mockito-core:5.5.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:5.1.0'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+kotlin {
+    sourceSets {
+        test {
+            kotlin.srcDir("src/test/kotlin") // Modern way to add Kotlin sources
+        }
+    }
+}
+
+==== END OF build.gradle ====
+==== START OF StatsVisSummary.md ====
+# Baseball Stats Visualizer - Summary
+
+## Architecture
+
+- **Framework:** Spring Boot MVC
+- **Persistence:** JPA (PostgreSQL in production, H2 for tests)
+- **Templating:** Thymeleaf
+- **Security:** HTTP Basic Authentication with a self-signed HTTPS certificate
+
+## Security
+
+- In-memory user: **maintainer**
+- Upload endpoints secured via basic auth and HTTPS
+
+## File Uploads
+
+- **Events:** `POST /upload/events`
+    - Accepts multipart event files containing multiple games
+    - **Parsing:** Uses `EventFileParser` and `EventDetails`
+        - Detects game boundaries via "id" records
+        - Handles play tokens (e.g., special case for tokens like `F9LF`)
+- **Rosters:** `POST /upload/rosters`
+    - Processes `.ROS` files using `RosFileParser`
+    - Persists roster entries
+- **Teams:** `POST /upload/teams`
+    - Accepts CSV files parsed by `CsvTeamParser`
+    - Creates/updates team records
+
+## Views (Thymeleaf)
+
+- **Players, Teams, Rosters:** Paginated, sortable, and searchable tables
+- **(Planned) Games:** Interfaces for listing games and detailed game views
+
+## Domain Model
+
+- **Entities:** `Game`, `Player`, `Team`, `PlayerEvent`, `RosterEntry`, `Site`
+- **Enums:** `EventType`, `PitchType`, `GameType`, `Position`, Weather (FieldConditions, PrecipitationType, SkyType,
+  WindDirection)
+- **Services & Repositories:** Standard CRUD and business logic encapsulated in service layers
+
+==== END OF StatsVisSummary.md ====
