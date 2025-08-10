@@ -64,6 +64,23 @@ class RetrosheetEventParserTest {
         assertEquals("aloma001", game.plays.first().playerId)
     }
 
+    @Test
+    fun `should parse runner advances`() {
+        val content = """
+            id,EXAMPLE3
+            play,1,0,aloma001,??,S,S7/G.1-2;B-1
+            play,1,0,smith001,??,S,S7/G.1X2
+        """.trimIndent()
+
+        val tempFile = createTempFile("example3.evn", content)
+        val game = parser.parseEventFile(tempFile)
+
+        assertEquals("2", game.plays[0].runnerAdvances['1'])
+        assertEquals("1", game.plays[0].runnerAdvances['B'])
+        assertEquals("X2", game.plays[1].runnerAdvances['1'])
+        assertEquals("S7/G", game.plays[0].event)
+    }
+
     private fun createTempFile(fileName: String, content: String): Path {
         val tempFile = Files.createTempFile(fileName, fileName)
         Files.write(tempFile, content.toByteArray(), StandardOpenOption.WRITE)

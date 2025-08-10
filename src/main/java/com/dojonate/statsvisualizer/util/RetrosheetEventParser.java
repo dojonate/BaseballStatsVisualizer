@@ -8,6 +8,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -64,10 +66,37 @@ public class RetrosheetEventParser {
             String playerId = parts[3];
             String count = parts[4];
             String pitches = parts[5];
-            String event = parts[6];
-            return Optional.of(new Play(inning, home, playerId, count, pitches, event));
+            String eventField = parts[6];
+            int dotIndex = eventField.indexOf('.');
+            String event = dotIndex >= 0 ? eventField.substring(0, dotIndex) : eventField;
+            Map<Character, String> advances = dotIndex >= 0
+                    ? parseRunnerAdvances(eventField.substring(dotIndex + 1))
+                    : Map.of();
+            return Optional.of(new Play(inning, home, playerId, count, pitches, event, advances));
         } catch (NumberFormatException ex) {
             return Optional.empty();
         }
+    }
+
+    private Map<Character, String> parseRunnerAdvances(String advancePart) {
+        Map<Character, String> advances = new LinkedHashMap<>();
+        if (advancePart == null || advancePart.isEmpty()) {
+            return advances;
+        }
+        String[] tokens = advancePart.split(";");
+        for (String token : tokens) {
+            String trimmed = token.trim();
+            if (trimmed.length() >= 3) {
+                char from = trimmed.charAt(0);
+                char action = trimmed.charAt(1);
+                char to = trimmed.charAt(2);
+                if (action == '-') {
+                    advances.put(from, String.valueOf(to));
+                } else if (action == 'X') {
+                    advances.put(from, "X" + to);
+                }
+            }
+        }
+        return advances;
     }
 }
