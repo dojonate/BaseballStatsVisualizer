@@ -9,6 +9,8 @@ public class RetrosheetGame {
     private String gameId;
     private final Map<String, String> info = new LinkedHashMap<>();
     private final List<Play> plays = new ArrayList<>();
+    private final List<LineupEntry> visitorLineup = new ArrayList<>();
+    private final List<LineupEntry> homeLineup = new ArrayList<>();
 
     public String getGameId() {
         return gameId;
@@ -26,11 +28,23 @@ public class RetrosheetGame {
         return Collections.unmodifiableList(plays);
     }
 
+    public List<LineupEntry> getVisitorLineup() {
+        return Collections.unmodifiableList(visitorLineup);
+    }
+
+    public List<LineupEntry> getHomeLineup() {
+        return Collections.unmodifiableList(homeLineup);
+    }
+
     public void addInfo(String key, String value) {
         info.put(key, value);
     }
 
     public void addPlay(Play play) {
         plays.add(play);
+    }
+
+    public void addLineupEntry(boolean home, LineupEntry entry) {
+        (home ? homeLineup : visitorLineup).add(entry);
     }
 }

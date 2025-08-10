@@ -1,6 +1,9 @@
 package com.dojonate.statsvisualizer.util
 
+import com.dojonate.statsvisualizer.model.Team
+import com.dojonate.statsvisualizer.util.RosFileParser
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
@@ -79,6 +82,34 @@ class RetrosheetEventParserTest {
         assertEquals("1", game.plays[0].runnerAdvances['B'])
         assertEquals("X2", game.plays[1].runnerAdvances['1'])
         assertEquals("S7/G", game.plays[0].event)
+    }
+
+    @Test
+    fun `should parse starting lineups with roster cross reference`() {
+        val event = Paths.get(javaClass.getResource("/retrosheet/BOS19300415.EVA")!!.toURI())
+        val bosTeam = Team("BOS", "Boston Red Sox", "AL", null, null)
+        val wsTeam = Team("WS1", "Washington Senators", "AL", null, null)
+        val rosParser = RosFileParser()
+        val bosRoster = rosParser.parseRosFile(Paths.get(javaClass.getResource("/retrosheet/BOS1930.ROS")!!.toURI()), bosTeam)
+        val wsRoster = rosParser.parseRosFile(Paths.get(javaClass.getResource("/retrosheet/WS11930.ROS")!!.toURI()), wsTeam)
+        val rosters = mapOf("BOS" to bosRoster, "WS1" to wsRoster)
+
+        val game = parser.parseEventFile(event, rosters)
+
+        assertEquals(9, game.visitorLineup.size)
+        assertEquals(9, game.homeLineup.size)
+
+        val westRosterPlayer = wsRoster.first { it.player.playerId == "wests101" }.player
+        val westLineup = game.visitorLineup.first()
+        assertSame(westRosterPlayer, westLineup.player)
+        assertEquals(1, westLineup.battingOrder)
+        assertEquals(8, westLineup.fieldingPosition)
+
+        val rothRosterPlayer = bosRoster.first { it.player.playerId == "rothj101" }.player
+        val rothLineup = game.homeLineup.first()
+        assertSame(rothRosterPlayer, rothLineup.player)
+        assertEquals(1, rothLineup.battingOrder)
+        assertEquals(9, rothLineup.fieldingPosition)
     }
 
     private fun createTempFile(fileName: String, content: String): Path {
