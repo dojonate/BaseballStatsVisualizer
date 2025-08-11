@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id 'java'
     id("org.jetbrains.kotlin.jvm") version '1.9.10'
@@ -9,15 +11,9 @@ group = 'com.dojonate'
 version = '0.0.1-SNAPSHOT'
 
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
-kotlin {
-    jvmToolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
+    // Compile against Java 17 for cross-version compatibility
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.test {
@@ -45,6 +41,9 @@ dependencies {
 }
 
 kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
     sourceSets {
         test {
             kotlin.srcDir("src/test/kotlin") // Modern way to add Kotlin sources
