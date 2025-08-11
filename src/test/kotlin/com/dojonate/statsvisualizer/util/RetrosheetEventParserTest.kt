@@ -112,6 +112,35 @@ class RetrosheetEventParserTest {
         assertEquals(9, rothLineup.fieldingPosition)
     }
 
+    @Test
+    fun `should parse substitutions`() {
+        val event = Paths.get(javaClass.getResource("/retrosheet/BOS19300415.EVA")!!.toURI())
+        val bosTeam = Team("BOS", "Boston Red Sox", "AL", null, null)
+        val wsTeam = Team("WS1", "Washington Senators", "AL", null, null)
+        val rosParser = RosFileParser()
+        val bosRoster = rosParser.parseRosFile(Paths.get(javaClass.getResource("/retrosheet/BOS1930.ROS")!!.toURI()), bosTeam)
+        val wsRoster = rosParser.parseRosFile(Paths.get(javaClass.getResource("/retrosheet/WS11930.ROS")!!.toURI()), wsTeam)
+        val rosters = mapOf("BOS" to bosRoster, "WS1" to wsRoster)
+
+        val game = parser.parseEventFile(event, rosters)
+
+        assertEquals(4, game.homeSubstitutions.size)
+        val firstSub = game.homeSubstitutions.first()
+        assertEquals("cicej101", firstSub.playerIn().playerId)
+        val berry = bosRoster.first { it.player.playerId == "berrc103" }.player
+        assertSame(berry, firstSub.playerOut())
+        assertEquals(8, firstSub.battingOrder())
+        assertEquals(11, firstSub.fieldingPosition())
+        assertEquals(8, firstSub.inning())
+        assertEquals(true, firstSub.homeHalf())
+
+        val secondSub = game.homeSubstitutions[1]
+        assertEquals(false, secondSub.homeHalf())
+        assertEquals(9, secondSub.inning())
+        assertEquals("conne101", secondSub.playerIn().playerId)
+        assertEquals("cicej101", secondSub.playerOut()?.playerId)
+    }
+
     private fun createTempFile(fileName: String, content: String): Path {
         val tempFile = Files.createTempFile(fileName, fileName)
         Files.write(tempFile, content.toByteArray(), StandardOpenOption.WRITE)

@@ -5,6 +5,7 @@ import com.dojonate.statsvisualizer.model.Play;
 import com.dojonate.statsvisualizer.model.Player;
 import com.dojonate.statsvisualizer.model.RosterEntry;
 import com.dojonate.statsvisualizer.model.RetrosheetGame;
+import com.dojonate.statsvisualizer.model.Substitution;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -47,6 +48,10 @@ public class RetrosheetEventParser {
 
         try (BufferedReader reader = Files.newBufferedReader(filePath)) {
             String line;
+            int currentInning = 0;
+            boolean currentHalf = false;
+            Map<Integer, Player> visitorLineup = new LinkedHashMap<>();
+            Map<Integer, Player> homeLineup = new LinkedHashMap<>();
             while ((line = reader.readLine()) != null) {
                 String trimmed = line.trim();
                 if (trimmed.isEmpty() || trimmed.startsWith("#")) {
@@ -61,9 +66,17 @@ public class RetrosheetEventParser {
                         game.addInfo(parts[1], parts[2]);
                     }
                 } else if (trimmed.startsWith("start,")) {
-                    parseStartLine(trimmed, game, rostersByTeam);
+                    parseStartLine(trimmed, game, rostersByTeam, visitorLineup, homeLineup);
+                } else if (trimmed.startsWith("sub,")) {
+                    parseSubLine(trimmed, game, rostersByTeam, visitorLineup, homeLineup, currentInning, currentHalf);
                 } else if (trimmed.startsWith("play,")) {
-                    parsePlayLine(trimmed).ifPresent(game::addPlay);
+                    Optional<Play> maybePlay = parsePlayLine(trimmed);
+                    if (maybePlay.isPresent()) {
+                        Play play = maybePlay.get();
+                        game.addPlay(play);
+                        currentInning = play.inning();
+                        currentHalf = play.isHomeTeam();
+                    }
                 }
             }
         }
@@ -118,7 +131,8 @@ public class RetrosheetEventParser {
         return advances;
     }
 
-    private void parseStartLine(String line, RetrosheetGame game, Map<String, List<RosterEntry>> rostersByTeam) {
+    private void parseStartLine(String line, RetrosheetGame game, Map<String, List<RosterEntry>> rostersByTeam,
+                               Map<Integer, Player> visitorLineup, Map<Integer, Player> homeLineup) {
         // start,playerID,"Player Name",home/visitor,battingPos,fieldPos
         String[] parts = line.split(",", 6);
         if (parts.length < 6) {
@@ -139,8 +153,41 @@ public class RetrosheetEventParser {
                 player = createFallbackPlayer(playerId, rawName);
             }
             game.addLineupEntry(home, new LineupEntry(player, battingOrder, fieldPos));
+            (home ? homeLineup : visitorLineup).put(battingOrder, player);
         } catch (NumberFormatException ignored) {
             // ignore invalid start line
+        }
+    }
+
+    private void parseSubLine(String line, RetrosheetGame game, Map<String, List<RosterEntry>> rostersByTeam,
+                              Map<Integer, Player> visitorLineup, Map<Integer, Player> homeLineup,
+                              int currentInning, boolean currentHalf) {
+        // sub,playerID,"Player Name",home/visitor,battingPos,fieldPos
+        String[] parts = line.split(",", 6);
+        if (parts.length < 6) {
+            return;
+        }
+        String playerId = parts[1];
+        String rawName = parts[2];
+        if (rawName.startsWith("\"") && rawName.endsWith("\"")) {
+            rawName = rawName.substring(1, rawName.length() - 1);
+        }
+        boolean home = "1".equals(parts[3]);
+        try {
+            int battingOrder = Integer.parseInt(parts[4]);
+            int fieldPos = Integer.parseInt(parts[5]);
+
+            Player player = findPlayerFromRoster(game, rostersByTeam, playerId, home);
+            if (player == null) {
+                player = createFallbackPlayer(playerId, rawName);
+            }
+            Map<Integer, Player> lineup = home ? homeLineup : visitorLineup;
+            Player replaced = lineup.get(battingOrder);
+            Substitution sub = new Substitution(player, replaced, battingOrder, fieldPos, currentInning, currentHalf);
+            game.addSubstitution(home, sub);
+            lineup.put(battingOrder, player);
+        } catch (NumberFormatException ignored) {
+            // ignore invalid substitution line
         }
     }
 

@@ -11,6 +11,8 @@ public class RetrosheetGame {
     private final List<Play> plays = new ArrayList<>();
     private final List<LineupEntry> visitorLineup = new ArrayList<>();
     private final List<LineupEntry> homeLineup = new ArrayList<>();
+    private final List<Substitution> visitorSubstitutions = new ArrayList<>();
+    private final List<Substitution> homeSubstitutions = new ArrayList<>();
 
     public String getGameId() {
         return gameId;
@@ -36,6 +38,14 @@ public class RetrosheetGame {
         return Collections.unmodifiableList(homeLineup);
     }
 
+    public List<Substitution> getVisitorSubstitutions() {
+        return Collections.unmodifiableList(visitorSubstitutions);
+    }
+
+    public List<Substitution> getHomeSubstitutions() {
+        return Collections.unmodifiableList(homeSubstitutions);
+    }
+
     public void addInfo(String key, String value) {
         info.put(key, value);
     }
@@ -46,5 +56,9 @@ public class RetrosheetGame {
 
     public void addLineupEntry(boolean home, LineupEntry entry) {
         (home ? homeLineup : visitorLineup).add(entry);
+    }
+
+    public void addSubstitution(boolean home, Substitution substitution) {
+        (home ? homeSubstitutions : visitorSubstitutions).add(substitution);
     }
 }
